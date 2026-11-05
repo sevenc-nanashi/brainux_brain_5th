@@ -8,7 +8,10 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 11)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 12)\n'
+if [ -e /proc/device-tree/chosen/brainux,display-only ]; then
+    echo 'Display check: USB initialization disabled.'
+else
 # The USB console gives input before the native keyboard is ported.
 echo 'USB: configuring serial console'
 # A separate shell keeps errexit effective when the caller handles failure.
@@ -38,7 +41,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 11)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 12)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
@@ -48,6 +51,7 @@ elif [ -c /dev/ttyGS0 ]; then
     (while :; do /sbin/getty -L -n -l /bin/sh 115200 ttyGS0 vt100; sleep 1; done) > /run/usb-getty.log 2>&1 &
 else
     echo 'USB bound, but /dev/ttyGS0 is missing'
+fi
 fi
 switch_to_root() {
     trap '' USR1

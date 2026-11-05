@@ -143,3 +143,10 @@ diag 11はPW-H1に限り、U-Bootと同じPLL出力ENABLE（bit 13）も設定�
 また、初期化失敗・終了時にUSB PLLを停止しない。純正OSから引き継いだ表示クロックへの
 影響を切り分けるための暫定措置で、PLLと白画面の因果関係はまだ未確認。
 表示用予約RAMはdisplay 2のまま維持する。PLLを保持するためUSB終了時の省電力は未対応。
+
+diag 11でも白いノイズが再発したため、PLL停止回避だけでは解消していない。
+diag 12は表示の切り分け用としてUSBコントローラー・PHY・usbmiscをDTで無効化する。
+chosenの `brainux,display-only` によりinitramfsもUSB設定とgetty起動を省略する。
+表示用RAM・LCD設定は変更しない。ローダーによる引き継ぎ前のUSB DMA停止は維持する。
+この版はUSBシリアルを利用できず、実機の表示安定性も未確認。
+復帰時は3ノードのstatusとchosenのマーカーを一緒に戻すこと。
