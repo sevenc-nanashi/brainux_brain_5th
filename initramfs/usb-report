@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+echo 'USB device bindings:'
+for item in PHY:40350000 MISC:40330200 USB:40330000 CI:ci_hdrc; do
+    label=${item%%:*}
+    address=${item#*:}
+    set -- /sys/bus/platform/devices/*"$address"*
+    if [ ! -e "$1" ]; then
+        echo "$label: device missing"
+        continue
+    fi
+    for device do
+        if [ -L "$device/driver" ]; then
+            driver=$(readlink "$device/driver")
+            echo "$label: ${driver##*/}"
+        else
+            echo "$label: no driver bound"
+            if [ -r "$device/waiting_for_supplier" ]; then
+                read -r waiting < "$device/waiting_for_supplier"
+                echo "  waiting_for_supplier=$waiting"
+            fi
+        fi
+    done
+done
+echo 'Deferred probes:'
+if mount -t debugfs debugfs /sys/kernel/debug; then
+    cat /sys/kernel/debug/devices_deferred
+else
+    echo 'debugfs mount failed'
+fi
+echo 'USB driver messages:'
+dmesg | sed -n -E '/ci_hdrc|40330000|40330200|40350000|usbmisc|syscon|supplier|deferred/p' | tail -n 8

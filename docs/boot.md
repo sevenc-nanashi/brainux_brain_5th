@@ -105,3 +105,6 @@ diag 8では大量の出力を避けるため `initcall_debug` を外し、カ�
 initramfs開始後は緊急メッセージ以外を画面に流さず、USB設定後に画面を消去して結果を表示する。
 USB設定とgettyの詳細はRAM上の `/run/usb-setup.log`・`/run/usb-getty.log` に保存し、カーネルログは `dmesg` で取得できる。
 これはログで結果が流れる問題への対処であり、USB接続時の表示ノイズを解決したことは実機未確認。
+diag 9はUSB失敗時にPHY・usbmisc・USB本体・ChipIdea子デバイスのドライバー登録状態を短い行で表示する。
+DEBUG_FSで依存デバイス待ちの理由も取得し、通常のusbcore登録メッセージを診断画面から除く。
+表示は48文字で折り返した先頭22行。全内容は `/run/usb-report.log` に保存する。

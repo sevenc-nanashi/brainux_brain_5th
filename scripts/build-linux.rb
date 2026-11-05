@@ -44,6 +44,7 @@ run(*base, "CONFIG_PREFIX=#{fs}", 'install', out: File::NULL)
 %w[dev proc sys run newroot].each { |dir| FileUtils.mkdir_p(File.join(fs, dir)) }
 FileUtils.cp(File.join(root, 'initramfs/init'), File.join(fs, 'init'))
 FileUtils.cp(File.join(root, 'initramfs/boot-root'), File.join(fs, 'sbin/boot-root'))
+FileUtils.cp(File.join(root, 'initramfs/usb-report'), File.join(fs, 'sbin/usb-report'))
 FileUtils.chmod(0755, [File.join(fs, 'init'), File.join(fs, 'sbin/boot-root')])
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')
@@ -70,7 +71,7 @@ run({'ARCH'=>'arm', 'CROSS_COMPILE'=>cross}, File.join(linux, 'scripts/kconfig/m
     File.join(output, '.config'), fragment, chdir: linux, out: File::NULL)
 run(*base, 'olddefconfig', out: File::NULL)
 resolved = File.read(File.join(output, '.config'))
-%w[MMU CPU_V7 SOC_IMX7ULP ARM_PSCI ARM_PATCH_PHYS_VIRT DEVTMPFS BLK_DEV_INITRD FB_SIMPLE MFD_SYSCON USB_MXS_PHY USB_CHIPIDEA_IMX USB_CONFIGFS_ACM USB_CHIPIDEA_UDC MMC_SDHCI_ESDHC_IMX EXT4_FS].each do |name|
+%w[MMU CPU_V7 SOC_IMX7ULP ARM_PSCI ARM_PATCH_PHYS_VIRT DEVTMPFS BLK_DEV_INITRD FB_SIMPLE MFD_SYSCON DEBUG_FS USB_MXS_PHY USB_CHIPIDEA_IMX USB_CONFIGFS_ACM USB_CHIPIDEA_UDC MMC_SDHCI_ESDHC_IMX EXT4_FS].each do |name|
   raise "Required kernel option missing: CONFIG_#{name}=y" unless resolved.lines.any? { |line| line.chomp == "CONFIG_#{name}=y" }
 end
 run(*base, "-j#{jobs}", 'Image', 'imx7ulp-pwh1-brainux.dtb')
