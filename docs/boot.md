@@ -40,7 +40,8 @@ zImageやU-BootのuImageを入れない。initramfsはImageに組み込む。
 2. IRQ/FIQを止める。USDHCの転送終了を待ち、USDHCとUSBをリセットする。
 3. eDMAの要求を止め、稼働チャネルの停止を待つ。未対応のCAAM/GPUが有効なら停止する。
 4. A7側のwatchdogをunlock・無効化し、結果を確認する。MUの割り込みをマスクする。
-5. LCDIFの転送完了を待ち、ARMタイマー割り込みを無効化する。RUNの強制クリアは行わない。
+5. LCDIFは動かしたまま、ARMタイマー割り込みを無効化する。表示バッファはLinuxへ渡すRAM範囲の外に保持する。
+   実機ではRUNが100 ms以内に0へ戻らなかったため、Reflexと同様にRUNの完了待ち・強制クリアは行わない。
 6. スタックを使わないARMコードで、CLIDR/CCSIDRに従って全データキャッシュ階層をclean/invalidateする。
 7. 独自テーブルへ切り替える。RAMの実行可能な恒等マッピングと元のコードVAを両方用意し、
    物理アドレス側へ分岐してからMMU・D/I-cache・分岐予測を無効化する。

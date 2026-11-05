@@ -25,8 +25,7 @@ unsafe fn wait(address: usize, mask: u32, expected: u32) {
 unsafe fn progress(message: &str) {
     const { assert!(reflex::display::HEIGHT >= 450) };
     unsafe {
-        // Complete each one-shot transfer before touching the displayed pixels.
-        wait(0x40aa_0000, 1, 0);
+        // Match Reflex: RUN need not clear while the firmware display is active.
         for y in 410..450 {
             for x in 0..reflex::display::WIDTH {
                 reflex::display::write_pixel(x, y, 0xffff);
@@ -42,7 +41,6 @@ unsafe fn progress(message: &str) {
             1,
         );
         reflex::display::present();
-        wait(0x40aa_0000, 1, 0);
     }
 }
 
@@ -125,7 +123,7 @@ pub unsafe fn stop() {
         if clocked(34) {
             write(0x4022_0064, read(0x4022_0064) & 0xffff);
         }
-        // Do not abort an in-flight panel transfer by clearing RUN.
+        // LCD keeps reading reserved firmware RAM, outside the Linux memory range.
         progress("Boot 6/6: MMU -> Linux");
         asm!(
             "mov r0, #0",

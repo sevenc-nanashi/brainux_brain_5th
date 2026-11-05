@@ -15,7 +15,7 @@ static void pwh1_refresh_work(struct work_struct *work)
 {
 	struct pwh1_refresh *refresh = container_of(to_delayed_work(work),
 						  struct pwh1_refresh, work);
-	/* Firmware uses a one-shot LCDIF transfer; simplefb alone never sets RUN. */
+	/* Request a transfer when idle; leave an active firmware scanout running. */
 	if (!(readl(refresh->lcd) & 1))
 		writel(1, refresh->lcd + 4);
 	schedule_delayed_work(&refresh->work, msecs_to_jiffies(33));
