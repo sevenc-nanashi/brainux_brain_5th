@@ -118,6 +118,7 @@ fn save_boot_snapshot() -> Result<(), String> {
         0x40aa_0040,
         0x40aa_0050,
         0x40b3_00a8,
+        0x40b3_00a4,
     ] {
         let value = unsafe { ptr::read_volatile(address as *const u32) };
         writeln!(report, "{address:08x}={value:08x}").unwrap();
@@ -165,7 +166,7 @@ impl Application for Loader {
         }
         if self.armed && (code == b'B' as u16 || code == b'b' as u16) {
             unsafe {
-                quiesce::progress("Boot: B received (diag 4)");
+                quiesce::progress("Boot: B received (diag 5)");
                 if let Err(error) = quiesce::check() {
                     self.status = String::from(error);
                     self.armed = false;
@@ -208,7 +209,7 @@ impl Application for Loader {
     fn draw(&self, pixels: &mut [u16]) {
         pixels.fill(0xffff);
         for (y, line) in [
-            (30, "Brainux / PW-H1 Linux loader (diag 4)"),
+            (30, "Brainux / PW-H1 Linux loader (diag 5)"),
             (90, self.status.as_str()),
             (160, "Image -> 61008000   DTB -> 67000000"),
             (210, "USB serial console: 115200 / ttyGS0"),

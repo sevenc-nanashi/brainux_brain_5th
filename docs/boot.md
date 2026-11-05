@@ -65,7 +65,7 @@ Linuxのタイマーはi.MX7ULP TPMで、CNTFRQ=0を周波数として採用し�
 - warm boot専用compatibleで純正OSに合わないi.MX7ULPのPM初期化・cpuidle・NMI処理を回避する。
 - SDは純正OSのpinmuxと電源を引き継ぐ。内蔵eMMC、GPU、CAAM、RPMsg、省電力は無効。
 - 画面はsimplefbと小さなLCDIF RUN更新ドライバを組み合わせる。LCDのタイミングやMIPI初期化は変更しない。
-  クロック初期化時のLCDIFゲート停止をPW-H1のみ抑止し、更新ドライバがLCDIFクロックを取得・有効化する。
+  クロック初期化時のLCDIF・DSIゲート停止をPW-H1のみ抑止し、更新ドライバがLCDIFクロックを取得・有効化する。
 - USB peripheralとACMで初期シェルを提供する。SD上の既存Brainuxへswitch_rootする経路を含む。
 
 ## 未確認・未対応
@@ -90,3 +90,7 @@ UPDATE=0が必ずしも停止不能を意味しない点は
 [U-Bootのi.MX7ULP初期化](https://github.com/u-boot/u-boot/blob/master/arch/arm/mach-imx/mx7ulp/soc.c)に基づく。
 1はストレージ、2はUSB、3はDMA、4はwatchdog、5はMUの停止開始、6はMMU切り替え直前を示す。
 6の表示だけではカーネルへ到達したとは判断できない。
+diag 5ではアセンブリの移行処理から画面左端に16 px幅の色帯を順に追加する。
+赤は全キャッシュのclean/invalidate後、青はMMU無効化後、緑はImage・DTBのコピー後でLinuxへ分岐する直前。
+各段階は250 ms表示する。緑もLinux本体の実行成功を保証するものではない。
+診断ログにはDSIのPCC (`40b300a4`) も含める。

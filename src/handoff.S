@@ -5,6 +5,43 @@
 .balign 32
 .global handoff
 .type handoff,%function
+// Three 16-pixel-wide bars, using no stack and preserving the payload registers.
+.macro boot_mark offset, color
+    movw r5, #\offset
+    movt r5, #0x60a0
+    add r7, r5, #0x3c00
+    mov r6, r5
+    movw r0, #\color
+.Lpaint\@:
+    strh r0, [r6], #2
+    cmp r6, r7
+    blo .Lpaint\@
+    mrc p15, 0, r0, c0, c0, 1
+    ubfx r0, r0, #16, #4
+    mov r6, #4
+    lsl r6, r6, r0
+    sub r0, r6, #1
+    bic r5, r5, r0
+.Lclean\@:
+    mcr p15, 0, r5, c7, c10, 1
+    add r5, r5, r6
+    cmp r5, r7
+    blo .Lclean\@
+    dsb sy
+    // Leave 250 ms for continuous scanout to show the marker.
+    movw r1, #0x3c00
+    movt r1, #0x410a
+    ldr r5, [r1]
+    ldr r7, [r1, #4]
+    movw r0, #0xd090
+    movt r0, #3
+.Ldelay\@:
+    ldr r6, [r1]
+    ldr r7, [r1, #4]
+    sub r6, r6, r5
+    cmp r6, r0
+    blo .Ldelay\@
+.endm
 handoff:
     cpsid if
     mov r8, r0
@@ -49,6 +86,7 @@ handoff:
     add r10, r10, #2
     b 1b
 5:
+    boot_mark 0x0008, 0xf800
     mov r0, #0
     mcr p15, 2, r0, c0, c0, 0
     dsb sy
@@ -86,6 +124,7 @@ handoff:
     dsb sy
     isb
     // Copy byte-exactly: neither input length needs word alignment.
+    boot_mark 0x3c08, 0x001f
     movw r4, #0x8000
     movt r4, #0x6100
     mov r5, r4
@@ -102,6 +141,7 @@ handoff:
     subs lr, lr, #1
     bne 8b
     dsb sy
+    boot_mark 0x7808, 0x07e0
     // Linux owns SVC's stack from here; do not use the firmware's banked stack.
     cps #0x13
     mov r0, #0

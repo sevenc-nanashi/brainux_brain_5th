@@ -36,7 +36,7 @@ index 6ab1a0176..955190a79 100644
  		platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
  
 diff --git a/drivers/clk/imx/clk-composite-7ulp.c b/drivers/clk/imx/clk-composite-7ulp.c
-index 71e0b939f..0b9bcf1bc 100644
+index 71e0b939f..2f3f35a2b 100644
 --- a/drivers/clk/imx/clk-composite-7ulp.c
 +++ b/drivers/clk/imx/clk-composite-7ulp.c
 @@ -10,6 +10,8 @@
@@ -55,9 +55,9 @@ index 71e0b939f..0b9bcf1bc 100644
 -		val = readl_relaxed(reg);
 -		val &= ~(1 << PCG_CGC_SHIFT);
 -		writel_relaxed(val, reg);
-+		/* PW-H1 keeps the firmware LCD timing for its simple framebuffer. */
++		/* PW-H1 keeps the firmware LCDIF and DSI link running. */
 +		if (!(of_machine_is_compatible("sharp,pw-h1-brainux") &&
-+		      !strcmp(name, "lcdif"))) {
++		      (!strcmp(name, "lcdif") || !strcmp(name, "dsi")))) {
 +			val = readl_relaxed(reg);
 +			val &= ~(1 << PCG_CGC_SHIFT);
 +			writel_relaxed(val, reg);
