@@ -150,3 +150,10 @@ chosenの `brainux,display-only` によりinitramfsもUSB設定とgetty起動を
 表示用RAM・LCD設定は変更しない。ローダーによる引き継ぎ前のUSB DMA停止は維持する。
 この版はUSBシリアルを利用できず、実機の表示安定性も未確認。
 復帰時は3ノードのstatusとchosenのマーカーを一緒に戻すこと。
+
+diag 12でも画面破損が再発した。display 2での改善報告も再現性未確認として扱う。
+diag 13ではUSB無効を維持し、`nohlt` でCPUのアイドルをポーリングにする。
+`CONFIG_CPU_IDLE=n` でもARMの既定idle処理は `cpu_do_idle()` を呼ぶため、WFIは残る。
+本カーネルは `CONFIG_GENERIC_IDLE_POLL_SETUP=y` で `nohlt` を受理する。
+純正OSから引き継いだ低電力設定の影響を切り分ける目的であり、原因確定ではない。
+CPUが待機しないため消費電力・発熱が増える可能性があり、短時間の確認に限る。
