@@ -6,12 +6,12 @@ mount -t sysfs sysfs /sys
 mkdir -p /dev/pts /run /newroot
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
-printf '\nBrainux PW-H1 initramfs started (diag 6)\n'
+printf '\nBrainux PW-H1 initramfs started (diag 7)\n'
 # The USB console gives input before the native keyboard is ported.
-mount -t configfs configfs /sys/kernel/config
 echo 'USB: configuring serial console'
-(
-    set -e
+# A separate shell keeps errexit effective when the caller handles failure.
+/bin/sh -e <<'USB_SETUP'
+    mount -t configfs configfs /sys/kernel/config
     cd /sys/kernel/config/usb_gadget
     mkdir brainux
     cd brainux
@@ -28,14 +28,18 @@ echo 'USB: configuring serial console'
         set -- /sys/class/udc/*
         if [ -e "$1" ]; then break; fi
         attempts=$((attempts + 1))
-        [ "$attempts" -lt 10 ] || exit 1
+        [ "$attempts" -lt 10 ] || { echo 'USB: no controller registered after 10 seconds'; exit 1; }
         sleep 1
     done
     [ "$#" -eq 1 ]
     echo "${1##*/}" > UDC
     echo "USB: serial console bound to ${1##*/}"
-) || echo 'USB gadget setup failed'
-if [ -c /dev/ttyGS0 ]; then
+USB_SETUP
+usb_status=$?
+if [ "$usb_status" -ne 0 ]; then
+    echo "USB gadget setup failed (exit $usb_status)"
+    dmesg | sed -n -E '/usb|USB|4033|4035|syscon|deferred/p' | tail -n 12
+elif [ -c /dev/ttyGS0 ]; then
     (while :; do /sbin/getty -L -n -l /bin/sh 115200 ttyGS0 vt100; sleep 1; done) &
 fi
 switch_to_root() {
