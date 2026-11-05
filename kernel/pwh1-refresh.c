@@ -4,55 +4,43 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/workqueue.h>
 
-struct pwh1_refresh {
-	void __iomem *lcd;
-	struct delayed_work work;
-};
-
-static void pwh1_refresh_work(struct work_struct *work)
-{
-	struct pwh1_refresh *refresh = container_of(to_delayed_work(work),
-						  struct pwh1_refresh, work);
-	/* Request a transfer when idle; leave an active firmware scanout running. */
-	if (!(readl(refresh->lcd) & 1))
-		writel(1, refresh->lcd + 4);
-	schedule_delayed_work(&refresh->work, msecs_to_jiffies(33));
-}
+#define LCD_CTRL1 0x10
+#define LCD_CTRL2 0x20
+#define LCD_AS_CTRL 0x210
+#define REG_SET 4
+#define REG_CLR 8
+#define RECOVERY_ON_UNDERFLOW BIT(24)
+#define OUTSTANDING_REQS_MASK GENMASK(23, 21)
+#define OUTSTANDING_REQS_16 (4 << 21)
 
 static int pwh1_refresh_probe(struct platform_device *pdev)
 {
-	struct pwh1_refresh *refresh;
+	void __iomem *lcd;
 	struct clk *clk;
 
-	clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	clk = devm_clk_get_enabled(&pdev->dev, "lcdif");
 	if (IS_ERR(clk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(clk), "LCD clock unavailable\n");
+	clk = devm_clk_get_enabled(&pdev->dev, "dsi");
+	if (IS_ERR(clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(clk), "DSI clock unavailable\n");
 
-	refresh = devm_kzalloc(&pdev->dev, sizeof(*refresh), GFP_KERNEL);
-	if (!refresh)
-		return -ENOMEM;
-	refresh->lcd = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(refresh->lcd))
-		return PTR_ERR(refresh->lcd);
-	INIT_DELAYED_WORK(&refresh->work, pwh1_refresh_work);
-	platform_set_drvdata(pdev, refresh);
-	schedule_delayed_work(&refresh->work, 0);
+	lcd = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(lcd))
+		return PTR_ERR(lcd);
+
+	/* Match mxsfb: recover pixel alignment after a FIFO underrun. */
+	writel(RECOVERY_ON_UNDERFLOW, lcd + LCD_CTRL1 + REG_SET);
+	writel(OUTSTANDING_REQS_MASK, lcd + LCD_CTRL2 + REG_CLR);
+	writel(OUTSTANDING_REQS_16, lcd + LCD_CTRL2 + REG_SET);
+	/* simplefb owns the primary plane, not the firmware overlay DMA. */
+	writel(1, lcd + LCD_AS_CTRL + REG_CLR);
+	if (!(readl(lcd + LCD_CTRL1) & RECOVERY_ON_UNDERFLOW) ||
+	    (readl(lcd + LCD_CTRL2) & OUTSTANDING_REQS_MASK) != OUTSTANDING_REQS_16 ||
+	    (readl(lcd + LCD_AS_CTRL) & 1))
+		return dev_err_probe(&pdev->dev, -EIO, "LCD scanout setup failed\n");
 	return 0;
-}
-
-static int pwh1_refresh_remove(struct platform_device *pdev)
-{
-	struct pwh1_refresh *refresh = platform_get_drvdata(pdev);
-
-	cancel_delayed_work_sync(&refresh->work);
-	return 0;
-}
-
-static void pwh1_refresh_shutdown(struct platform_device *pdev)
-{
-	pwh1_refresh_remove(pdev);
 }
 
 static const struct of_device_id pwh1_refresh_ids[] = {
@@ -62,8 +50,6 @@ static const struct of_device_id pwh1_refresh_ids[] = {
 MODULE_DEVICE_TABLE(of, pwh1_refresh_ids);
 static struct platform_driver pwh1_refresh_driver = {
 	.probe = pwh1_refresh_probe,
-	.remove = pwh1_refresh_remove,
-	.shutdown = pwh1_refresh_shutdown,
 	.driver = {
 		.name = "pwh1-lcd-refresh",
 		.of_match_table = pwh1_refresh_ids,

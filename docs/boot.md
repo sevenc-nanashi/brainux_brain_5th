@@ -2,8 +2,8 @@
 
 ## 状態
 
-診断ログで確認したV690_H1の配置を使う。起動ローダーとカーネルはビルド検証済みだが、
-Linux起動成功はまだ確認していない。実機結果に応じた周辺機器・M4通信の調整が必要。
+診断ログで確認したV690_H1の配置を使う。Linuxからinitramfsへの到達は実機確認済み。
+画面表示は不安定で修正中。実機結果に応じた周辺機器・M4通信の調整が必要。
 
 ## メモリ
 
@@ -64,8 +64,8 @@ Linuxのタイマーはi.MX7ULP TPMで、CNTFRQ=0を周波数として採用し�
   1 GiBのRAM・192 MiB CMA・EVKのRPMsg領域を使わない。
 - warm boot専用compatibleで純正OSに合わないi.MX7ULPのPM初期化・cpuidle・NMI処理を回避する。
 - SDは純正OSのpinmuxと電源を引き継ぐ。内蔵eMMC、GPU、CAAM、RPMsg、省電力は無効。
-- 画面はsimplefbと小さなLCDIF RUN更新ドライバを組み合わせる。LCDのタイミングやMIPI初期化は変更しない。
-  クロック初期化時のLCDIF・DSIゲート停止をPW-H1のみ抑止し、更新ドライバがLCDIFクロックを取得・有効化する。
+- 画面はsimplefbと小さなLCDIF設定ドライバを組み合わせる。LCDのタイミングやMIPI初期化は変更しない。
+  クロック初期化時のLCDIF・DSIゲート停止をPW-H1のみ抑止し、設定ドライバが両クロックを取得・保持する。
 - USB peripheralとACMで初期シェルを提供する。SD上の既存Brainuxへswitch_rootする経路を含む。
 
 ## 未確認・未対応
@@ -108,3 +108,13 @@ USB設定とgettyの詳細はRAM上の `/run/usb-setup.log`・`/run/usb-getty.lo
 diag 9はUSB失敗時にPHY・usbmisc・USB本体・ChipIdea子デバイスのドライバー登録状態を短い行で表示する。
 DEBUG_FSで依存デバイス待ちの理由も取得し、通常のusbcore登録メッセージを診断画面から除く。
 表示は48文字で折り返した先頭22行。全内容は `/run/usb-report.log` に保存する。
+
+## 表示の安定化（display 1）
+
+実機のCTRL1=`020f0300`ではRECOVERY_ON_UNDERFLOWが無効だった。
+参照カーネルの `drivers/video/fbdev/mxsfb.c` に合わせ、CTRL1のbit 24を有効にし、
+CTRL2のOUTSTANDING_REQSを16要求（値4）に設定する。純正OSの補助表示レイヤーのDMAも停止する。
+ローダーでLinuxへ移る前に設定し、Linux側でも設定・読戻しを確認する。
+連続表示中のRUNを33 msごとに操作する処理は削除し、LCDIFとDSIのクロックを保持する。
+BUXBOOT.TXTには変更前のCTRL2・AS_CTRL・AS_BUF・AS_NEXT_BUFも記録する。
+これらは表示の欠け・時間経過でのノイズへの対策だが、実機で改善するかは未確認。

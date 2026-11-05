@@ -49,6 +49,22 @@ unsafe fn present_buffer(address: usize) {
 
 unsafe fn select_linux_buffer() {
     unsafe {
+        // Match mxsfb's continuous-scanout setup before the uncached Image copy.
+        write(0x40aa_0014, 1 << 24);
+        write(0x40aa_0028, 7 << 21);
+        write(0x40aa_0024, 4 << 21);
+        // Linux owns only the primary plane, not the firmware alpha-surface DMA.
+        write(0x40aa_0218, 1);
+        asm!("dsb sy", options(nostack, preserves_flags));
+        assert!(
+            read(0x40aa_0010) & (1 << 24) != 0,
+            "LCD recovery not enabled"
+        );
+        assert!(
+            read(0x40aa_0020) & (7 << 21) == 4 << 21,
+            "LCD DMA requests not configured"
+        );
+        assert!(read(0x40aa_0210) & 1 == 0, "LCD overlay still enabled");
         let source = displayed_buffer() as *const u16;
         for pixel in 0..FRAME_BYTES / 2 {
             write_volatile(

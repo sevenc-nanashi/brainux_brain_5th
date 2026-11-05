@@ -27,8 +27,9 @@
     };
     lcd-refresh@40aa0000 {
         compatible = "sharp,pwh1-lcd-refresh";
-        reg = <0x40aa0000 0x10>;
-        clocks = <&pcc3 IMX7ULP_CLK_LCDIF>;
+        reg = <0x40aa0000 0x240>;
+        clocks = <&pcc3 IMX7ULP_CLK_LCDIF>, <&pcc3 IMX7ULP_CLK_DSI>;
+        clock-names = "lcdif", "dsi";
     };
 };
 &cpu0 { /delete-property/ operating-points-v2; };
