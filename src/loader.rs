@@ -151,7 +151,7 @@ impl Application for Loader {
         }
         if self.armed && (code == b'B' as u16 || code == b'b' as u16) {
             unsafe {
-                quiesce::progress("Boot: B received (diag 2)");
+                quiesce::progress("Boot: B received (diag 3)");
                 if let Err(error) = quiesce::check() {
                     self.status = String::from(error);
                     self.armed = false;
@@ -194,7 +194,7 @@ impl Application for Loader {
     fn draw(&self, pixels: &mut [u16]) {
         pixels.fill(0xffff);
         for (y, line) in [
-            (30, "Brainux / PW-H1 Linux loader (diag 2)"),
+            (30, "Brainux / PW-H1 Linux loader (diag 3)"),
             (90, self.status.as_str()),
             (160, "Image -> 61008000   DTB -> 67000000"),
             (210, "USB serial console: 115200 / ttyGS0"),

@@ -22,25 +22,68 @@ unsafe fn wait(address: usize, mask: u32, expected: u32) {
     }
 }
 
+const FRAMEBUFFER: usize = 0x60a0_0008;
+const PEG_FRAMEBUFFER: usize = 0x60ac_a810;
+const FRAME_BYTES: usize = reflex::display::WIDTH * reflex::display::HEIGHT * 2;
+
+unsafe fn displayed_buffer() -> usize {
+    let address = unsafe { read(0x40aa_0040) } as usize;
+    assert!(
+        matches!(address, FRAMEBUFFER | PEG_FRAMEBUFFER),
+        "Unknown LCD buffer: {address:08x}"
+    );
+    address
+}
+
+unsafe fn present_buffer(address: usize) {
+    unsafe {
+        let ctr: u32;
+        asm!("mrc p15, 0, {ctr}, c0, c0, 1", ctr = out(reg) ctr, options(nostack, preserves_flags));
+        let line_size = 4usize << ((ctr >> 16) & 15);
+        for line in ((address & !(line_size - 1))..address + FRAME_BYTES).step_by(line_size) {
+            asm!("mcr p15, 0, {line}, c7, c10, 1", line = in(reg) line, options(nostack, preserves_flags));
+        }
+        asm!("dsb sy", options(nostack, preserves_flags));
+    }
+}
+
+unsafe fn select_linux_buffer() {
+    unsafe {
+        let source = displayed_buffer() as *const u16;
+        for pixel in 0..FRAME_BYTES / 2 {
+            write_volatile(
+                (FRAMEBUFFER as *mut u16).add(pixel),
+                read_volatile(source.add(pixel)),
+            );
+        }
+        present_buffer(FRAMEBUFFER);
+        // DOTCLK scanout latches NEXT_BUF at a frame boundary; do not stop RUN.
+        write(0x40aa_0050, FRAMEBUFFER as u32);
+        asm!("dsb sy", options(nostack, preserves_flags));
+        wait(0x40aa_0040, u32::MAX, FRAMEBUFFER as u32);
+    }
+}
+
+const _: () = {
+    assert!(FRAME_BYTES == 0xc8280);
+    assert!(FRAMEBUFFER + FRAME_BYTES <= PEG_FRAMEBUFFER);
+    assert!(PEG_FRAMEBUFFER + FRAME_BYTES < 0x6100_0000);
+};
+
 pub unsafe fn progress(message: &str) {
     const { assert!(reflex::display::HEIGHT >= 120) };
     unsafe {
-        // Match Reflex: RUN need not clear while the firmware display is active.
+        let buffer = displayed_buffer() as *mut u16;
+        let pixel = |x, y, color| {
+            write_volatile(buffer.add(reflex::display::framebuffer_index(x, y)), color);
+        };
         for y in 80..120 {
             for x in 0..reflex::display::WIDTH {
-                reflex::display::write_pixel(x, y, 0xffff);
+                pixel(x, y, 0xffff);
             }
         }
-        reflex::text::draw(
-            |x, y, color| reflex::display::write_pixel(x, y, color),
-            12,
-            90,
-            message,
-            0,
-            0xffff,
-            1,
-        );
-        reflex::display::present();
+        reflex::text::draw(pixel, 12, 90, message, 0, 0xffff, 1);
+        present_buffer(buffer as usize);
         // Let scanout show the marker before stopping the next peripheral.
         let started = reflex::runtime::micros();
         while reflex::runtime::micros().wrapping_sub(started) < 250_000 {
@@ -52,6 +95,13 @@ pub unsafe fn progress(message: &str) {
 /// Refuse unsupported bus masters before changing any hardware.
 pub unsafe fn check() -> Result<(), &'static str> {
     unsafe {
+        let ctrl = read(0x40aa_0000);
+        if ctrl & ((1 << 19) | (1 << 17) | (3 << 8) | (1 << 5) | 1)
+            != (1 << 19) | (1 << 17) | (1 << 5) | 1
+            || read(0x40aa_0030) != 0x0356_01e0
+        {
+            return Err("Unsupported LCD scanout mode");
+        }
         if clocked(36) {
             return Err("CAAM clock active; cannot boot yet");
         }
@@ -73,6 +123,8 @@ pub unsafe fn stop() {
     unsafe {
         asm!("cpsid if", options(nostack, preserves_flags));
         check().expect("Bus master changed before handoff");
+        progress("Boot: selecting Linux framebuffer");
+        select_linux_buffer();
         progress("Boot 1/6: storage");
         // Finish card transactions before resetting either controller.
         for (slot, base) in [(55, 0x4037_0000), (56, 0x4038_0000)] {
