@@ -66,10 +66,28 @@ index 71e0b939f..2f3f35a2b 100644
  
  	hw = clk_hw_register_composite(NULL, name, parent_names, num_parents,
 diff --git a/drivers/usb/phy/phy-mxs-usb.c b/drivers/usb/phy/phy-mxs-usb.c
-index e94e5bae7..5d2b0db56 100644
+index e94e5bae7..f2019689d 100644
 --- a/drivers/usb/phy/phy-mxs-usb.c
 +++ b/drivers/usb/phy/phy-mxs-usb.c
-@@ -339,6 +339,8 @@ static int mxs_phy_pll_enable(void __iomem *base, bool enable)
+@@ -69,6 +69,7 @@
+ #define BM_USBPHY_PLL_LOCK			BIT(31)
+ #define BM_USBPHY_PLL_REG_ENABLE		BIT(21)
+ #define BM_USBPHY_PLL_BYPASS			BIT(16)
++#define BM_USBPHY_PLL_ENABLE			BIT(13)
+ #define BM_USBPHY_PLL_POWER			BIT(12)
+ #define BM_USBPHY_PLL_EN_USB_CLKS		BIT(6)
+ 
+@@ -334,11 +335,18 @@ static void mxs_phy_tx_init(struct mxs_phy *mxs_phy)
+ static int mxs_phy_pll_enable(void __iomem *base, bool enable)
+ {
+ 	int ret = 0;
++	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
++
++	/* shortcut: preserve firmware PLL until PW-H1 display clock ownership is known. */
++	if (!enable && pwh1)
++		return 0;
+ 
+ 	if (enable) {
  		u32 value;
  
  		writel(BM_USBPHY_PLL_REG_ENABLE, base + HW_USBPHY_PLL_SIC_SET);
@@ -78,7 +96,20 @@ index e94e5bae7..5d2b0db56 100644
  		writel(BM_USBPHY_PLL_BYPASS, base + HW_USBPHY_PLL_SIC_CLR);
  		writel(BM_USBPHY_PLL_POWER, base + HW_USBPHY_PLL_SIC_SET);
  		ret = readl_poll_timeout(base + HW_USBPHY_PLL_SIC,
-@@ -384,13 +386,26 @@ static int mxs_phy_hw_init(struct mxs_phy *mxs_phy)
+@@ -347,8 +355,10 @@ static int mxs_phy_pll_enable(void __iomem *base, bool enable)
+ 		if (ret)
+ 			return ret;
+ 
+-		writel(BM_USBPHY_PLL_EN_USB_CLKS, base +
+-				HW_USBPHY_PLL_SIC_SET);
++		/* Match the i.MX7ULP U-Boot PLL output enables on PW-H1. */
++		writel(BM_USBPHY_PLL_EN_USB_CLKS |
++		       (pwh1 ? BM_USBPHY_PLL_ENABLE : 0),
++		       base + HW_USBPHY_PLL_SIC_SET);
+ 	} else {
+ 		writel(BM_USBPHY_PLL_EN_USB_CLKS, base +
+ 				HW_USBPHY_PLL_SIC_CLR);
+@@ -384,13 +394,26 @@ static int mxs_phy_hw_init(struct mxs_phy *mxs_phy)
  
  	if (is_imx7ulp_phy(mxs_phy) || is_imx8ulp_phy(mxs_phy)) {
  		ret = mxs_phy_pll_enable(base, true);
