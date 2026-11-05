@@ -107,6 +107,29 @@ fn main() -> Loader {
     }
 }
 
+fn save_boot_snapshot() -> Result<(), String> {
+    use core::fmt::Write;
+    let mut report = String::from("Brainux boot display snapshot v1\n");
+    // Read configuration registers before disabling firmware services.
+    for address in [
+        0x40aa_0000usize,
+        0x40aa_0010,
+        0x40aa_0030,
+        0x40aa_0040,
+        0x40aa_0050,
+        0x40b3_00a8,
+    ] {
+        let value = unsafe { ptr::read_volatile(address as *const u32) };
+        writeln!(report, "{address:08x}={value:08x}").unwrap();
+    }
+    let path = unsafe { paths::beside_app(b"BUXBOOT.TXT") }?;
+    let mut file = unsafe { fs::File::create(&path) }
+        .ok_or_else(|| String::from("Cannot create BUXBOOT.TXT"))?;
+    file.write(report.as_bytes())
+        .map_err(|e| format!("Boot log write: {e}"))?;
+    file.close().map_err(|e| format!("Boot log close: {e}"))
+}
+
 impl Application for Loader {
     fn event(&mut self, event: Event) -> Action {
         let Event::Key {
@@ -128,11 +151,18 @@ impl Application for Loader {
         }
         if self.armed && (code == b'B' as u16 || code == b'b' as u16) {
             unsafe {
+                quiesce::progress("Boot: B received (diag 2)");
                 if let Err(error) = quiesce::check() {
                     self.status = String::from(error);
                     self.armed = false;
                     return Action::Redraw;
                 }
+                if let Err(error) = save_boot_snapshot() {
+                    self.status = error;
+                    self.armed = false;
+                    return Action::Redraw;
+                }
+                quiesce::progress("Boot: verifying payload");
                 let bytes =
                     core::slice::from_raw_parts(ptr::addr_of!(PAYLOAD).cast::<u8>(), self.loaded);
                 let bundle = Bundle::parse(bytes).expect("Payload changed after verification");
@@ -164,7 +194,7 @@ impl Application for Loader {
     fn draw(&self, pixels: &mut [u16]) {
         pixels.fill(0xffff);
         for (y, line) in [
-            (30, "Brainux / PW-H1 Linux loader"),
+            (30, "Brainux / PW-H1 Linux loader (diag 2)"),
             (90, self.status.as_str()),
             (160, "Image -> 61008000   DTB -> 67000000"),
             (210, "USB serial console: 115200 / ttyGS0"),

@@ -22,11 +22,11 @@ unsafe fn wait(address: usize, mask: u32, expected: u32) {
     }
 }
 
-unsafe fn progress(message: &str) {
-    const { assert!(reflex::display::HEIGHT >= 450) };
+pub unsafe fn progress(message: &str) {
+    const { assert!(reflex::display::HEIGHT >= 120) };
     unsafe {
         // Match Reflex: RUN need not clear while the firmware display is active.
-        for y in 410..450 {
+        for y in 80..120 {
             for x in 0..reflex::display::WIDTH {
                 reflex::display::write_pixel(x, y, 0xffff);
             }
@@ -34,13 +34,18 @@ unsafe fn progress(message: &str) {
         reflex::text::draw(
             |x, y, color| reflex::display::write_pixel(x, y, color),
             12,
-            420,
+            90,
             message,
             0,
             0xffff,
             1,
         );
         reflex::display::present();
+        // Let scanout show the marker before stopping the next peripheral.
+        let started = reflex::runtime::micros();
+        while reflex::runtime::micros().wrapping_sub(started) < 250_000 {
+            core::hint::spin_loop();
+        }
     }
 }
 
