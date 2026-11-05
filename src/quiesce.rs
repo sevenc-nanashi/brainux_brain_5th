@@ -161,19 +161,34 @@ pub unsafe fn stop() {
         for (slot, base) in [(61, 0x403d_0000), (67, 0x4043_0000)] {
             let gate = 0x403f_0000 + slot * 4;
             write(gate, read(gate) | (1 << 30));
+            asm!("dsb sy", options(nostack, preserves_flags));
             let cs = read(base);
             if cs & (1 << 7) != 0 {
-                assert!(cs & (1 << 5) != 0, "Watchdog cannot be disabled");
-                if cs & (1 << 13) != 0 {
-                    write(base + 4, 0xd928_c520);
-                } else {
-                    write(base + 4, 0xc520);
-                    write(base + 4, 0xd928);
+                let timeout = read(base + 8);
+                let window = read(base + 12);
+                // UPDATE=0 also describes the initial, directly configurable state.
+                if cs & (1 << 5) != 0 {
+                    asm!("dmb sy", options(nostack, preserves_flags));
+                    if cs & (1 << 13) != 0 {
+                        write(base + 4, 0xd928_c520);
+                    } else {
+                        write(base + 4, 0xc520);
+                        write(base + 4, 0xd928);
+                    }
+                    asm!("dmb sy", options(nostack, preserves_flags));
+                    wait(base, 1 << 11, 1 << 11);
                 }
-                wait(base, 1 << 11, 1 << 11);
-                write(base, cs & !((1 << 7) | (1 << 14)));
+                write(base + 12, window);
+                write(base + 8, timeout);
+                write(base, (cs & !((1 << 7) | (1 << 14))) | (1 << 5));
+                asm!("dsb sy", options(nostack, preserves_flags));
                 wait(base, 1 << 10, 1 << 10);
-                assert!(read(base) & (1 << 7) == 0, "Watchdog still enabled");
+                let after = read(base);
+                assert!(
+                    after & (1 << 7) == 0,
+                    "Watchdog {base:08x}: CS {cs:08x} -> {after:08x}, PCC {:08x}",
+                    read(gate)
+                );
             }
         }
         progress("Boot 5/6: MU");

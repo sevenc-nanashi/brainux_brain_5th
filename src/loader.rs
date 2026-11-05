@@ -109,7 +109,7 @@ fn main() -> Loader {
 
 fn save_boot_snapshot() -> Result<(), String> {
     use core::fmt::Write;
-    let mut report = String::from("Brainux boot display snapshot v1\n");
+    let mut report = String::from("Brainux boot display/watchdog snapshot v2\n");
     // Read configuration registers before disabling firmware services.
     for address in [
         0x40aa_0000usize,
@@ -121,6 +121,20 @@ fn save_boot_snapshot() -> Result<(), String> {
     ] {
         let value = unsafe { ptr::read_volatile(address as *const u32) };
         writeln!(report, "{address:08x}={value:08x}").unwrap();
+    }
+    for (gate, base) in [
+        (0x403f_00f4usize, 0x403d_0000usize),
+        (0x403f_010c, 0x4043_0000),
+    ] {
+        let pcc = unsafe { ptr::read_volatile(gate as *const u32) };
+        writeln!(report, "{gate:08x}={pcc:08x}").unwrap();
+        // Do not enable a stopped clock merely to collect diagnostics.
+        if pcc & (1 << 30) != 0 {
+            for address in [base, base + 8, base + 12] {
+                let value = unsafe { ptr::read_volatile(address as *const u32) };
+                writeln!(report, "{address:08x}={value:08x}").unwrap();
+            }
+        }
     }
     let path = unsafe { paths::beside_app(b"BUXBOOT.TXT") }?;
     let mut file = unsafe { fs::File::create(&path) }
@@ -151,7 +165,7 @@ impl Application for Loader {
         }
         if self.armed && (code == b'B' as u16 || code == b'b' as u16) {
             unsafe {
-                quiesce::progress("Boot: B received (diag 3)");
+                quiesce::progress("Boot: B received (diag 4)");
                 if let Err(error) = quiesce::check() {
                     self.status = String::from(error);
                     self.armed = false;
@@ -194,7 +208,7 @@ impl Application for Loader {
     fn draw(&self, pixels: &mut [u16]) {
         pixels.fill(0xffff);
         for (y, line) in [
-            (30, "Brainux / PW-H1 Linux loader (diag 3)"),
+            (30, "Brainux / PW-H1 Linux loader (diag 4)"),
             (90, self.status.as_str()),
             (160, "Image -> 61008000   DTB -> 67000000"),
             (210, "USB serial console: 115200 / ttyGS0"),

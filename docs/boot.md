@@ -83,5 +83,10 @@ NEXT_BUFを同アドレスへ設定する。CUR_BUFの切り替えを100 ms以�
 対応するのは実機ログと同じ480×854・16 bit・DOTCLK/BYPASS_COUNTモードと、上記2つのバッファのみ。
 割り込みを止める前に、同じフォルダーの `BUXBOOT.TXT` を上書き保存する。
 LCDIFのCTRL・CTRL1・TRANSFER_COUNT・CUR_BUF・NEXT_BUFとLCDIFクロックの設定値を記録する。
+diag 4ではwatchdogのPCCと、クロック有効時のみCS・TOVAL・WINも記録する。
+watchdogはUPDATE=1なら解除シーケンスを実行し、UPDATE=0なら初回設定として停止を試みる。
+後者も実際にEN=0となったことを確認し、設定済みのロックなどで停止できなければアドレスとCS値を表示して停止する。
+UPDATE=0が必ずしも停止不能を意味しない点は
+[U-Bootのi.MX7ULP初期化](https://github.com/u-boot/u-boot/blob/master/arch/arm/mach-imx/mx7ulp/soc.c)に基づく。
 1はストレージ、2はUSB、3はDMA、4はwatchdog、5はMUの停止開始、6はMMU切り替え直前を示す。
 6の表示だけではカーネルへ到達したとは判断できない。
