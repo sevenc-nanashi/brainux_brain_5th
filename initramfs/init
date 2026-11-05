@@ -51,4 +51,4 @@ switch_to_root() {
 }
 trap switch_to_root USR1
 echo 'Use boot-root /dev/mmcblk0p2 to start an existing Brainux rootfs.'
-while :; do /bin/setsid /bin/cttyhack /bin/sh & wait "$!"; sleep 1; done
+while :; do setsid cttyhack /bin/sh & wait "$!"; sleep 1; done
