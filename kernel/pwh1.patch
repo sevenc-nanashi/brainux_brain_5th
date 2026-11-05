@@ -35,6 +35,36 @@ index 6ab1a0176..955190a79 100644
  	if (IS_ENABLED(CONFIG_ARM_IMX_CPUFREQ_DT))
  		platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
  
+diff --git a/drivers/clk/imx/clk-composite-7ulp.c b/drivers/clk/imx/clk-composite-7ulp.c
+index 71e0b939f..0b9bcf1bc 100644
+--- a/drivers/clk/imx/clk-composite-7ulp.c
++++ b/drivers/clk/imx/clk-composite-7ulp.c
+@@ -10,6 +10,8 @@
+ #include <linux/delay.h>
+ #include <linux/err.h>
+ #include <linux/io.h>
++#include <linux/of.h>
++#include <linux/string.h>
+ #include <linux/slab.h>
+ 
+ #include "../clk-fractional-divider.h"
+@@ -144,9 +146,13 @@ static struct clk_hw *imx_ulp_clk_hw_composite(const char *name,
+ 		 * change since the prepare count is zero, but HW actually
+ 		 * prevent the parent/rate change due to the clock is enabled.
+ 		 */
+-		val = readl_relaxed(reg);
+-		val &= ~(1 << PCG_CGC_SHIFT);
+-		writel_relaxed(val, reg);
++		/* PW-H1 keeps the firmware LCD timing for its simple framebuffer. */
++		if (!(of_machine_is_compatible("sharp,pw-h1-brainux") &&
++		      !strcmp(name, "lcdif"))) {
++			val = readl_relaxed(reg);
++			val &= ~(1 << PCG_CGC_SHIFT);
++			writel_relaxed(val, reg);
++		}
+ 	}
+ 
+ 	hw = clk_hw_register_composite(NULL, name, parent_names, num_parents,
 diff --git a/drivers/video/fbdev/Makefile b/drivers/video/fbdev/Makefile
 index fc1f85d8b..4bbee21b7 100644
 --- a/drivers/video/fbdev/Makefile

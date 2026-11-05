@@ -40,7 +40,7 @@ zImageやU-BootのuImageを入れない。initramfsはImageに組み込む。
 2. IRQ/FIQを止める。USDHCの転送終了を待ち、USDHCとUSBをリセットする。
 3. eDMAの要求を止め、稼働チャネルの停止を待つ。未対応のCAAM/GPUが有効なら停止する。
 4. A7側のwatchdogをunlock・無効化し、結果を確認する。MUの割り込みをマスクする。
-5. LCDIFのRUNを止め、ARMタイマー割り込みを無効化する。
+5. LCDIFの転送完了を待ち、ARMタイマー割り込みを無効化する。RUNの強制クリアは行わない。
 6. スタックを使わないARMコードで、CLIDR/CCSIDRに従って全データキャッシュ階層をclean/invalidateする。
 7. 独自テーブルへ切り替える。RAMの実行可能な恒等マッピングと元のコードVAを両方用意し、
    物理アドレス側へ分岐してからMMU・D/I-cache・分岐予測を無効化する。
@@ -63,6 +63,7 @@ Linuxのタイマーはi.MX7ULP TPMで、CNTFRQ=0を周波数として採用し�
 - warm boot専用compatibleで純正OSに合わないi.MX7ULPのPM初期化・cpuidle・NMI処理を回避する。
 - SDは純正OSのpinmuxと電源を引き継ぐ。内蔵eMMC、GPU、CAAM、RPMsg、省電力は無効。
 - 画面はsimplefbと小さなLCDIF RUN更新ドライバを組み合わせる。LCDのタイミングやMIPI初期化は変更しない。
+  クロック初期化時のLCDIFゲート停止をPW-H1のみ抑止し、更新ドライバがLCDIFクロックを取得・有効化する。
 - USB peripheralとACMで初期シェルを提供する。SD上の既存Brainuxへswitch_rootする経路を含む。
 
 ## 未確認・未対応
@@ -71,3 +72,6 @@ Linuxのタイマーはi.MX7ULP TPMで、CNTFRQ=0を周波数として採用し�
 M4の監視動作・メモリ共有は要検証。nativeキーボード・タッチ・音声・バッテリー・電源断は未対応。
 PEGコールバックをLinuxへ持ち越して入力を使うことはしていない。
 エラーが出た場合はその画面と、出力されていればUART／USBのカーネルログで原因を絞る。
+Bを押した後は画面下部に `Boot 1/6`〜`6/6` を表示する。
+1はストレージ、2はUSB、3はDMA、4はwatchdog、5はMUの停止開始、6はMMU切り替え直前を示す。
+6の表示だけではカーネルへ到達したとは判断できない。

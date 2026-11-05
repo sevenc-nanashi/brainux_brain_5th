@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -23,6 +24,11 @@ static void pwh1_refresh_work(struct work_struct *work)
 static int pwh1_refresh_probe(struct platform_device *pdev)
 {
 	struct pwh1_refresh *refresh;
+	struct clk *clk;
+
+	clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(clk), "LCD clock unavailable\n");
 
 	refresh = devm_kzalloc(&pdev->dev, sizeof(*refresh), GFP_KERNEL);
 	if (!refresh)

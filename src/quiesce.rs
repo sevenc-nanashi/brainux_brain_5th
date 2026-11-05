@@ -22,6 +22,30 @@ unsafe fn wait(address: usize, mask: u32, expected: u32) {
     }
 }
 
+unsafe fn progress(message: &str) {
+    const { assert!(reflex::display::HEIGHT >= 450) };
+    unsafe {
+        // Complete each one-shot transfer before touching the displayed pixels.
+        wait(0x40aa_0000, 1, 0);
+        for y in 410..450 {
+            for x in 0..reflex::display::WIDTH {
+                reflex::display::write_pixel(x, y, 0xffff);
+            }
+        }
+        reflex::text::draw(
+            |x, y, color| reflex::display::write_pixel(x, y, color),
+            12,
+            420,
+            message,
+            0,
+            0xffff,
+            1,
+        );
+        reflex::display::present();
+        wait(0x40aa_0000, 1, 0);
+    }
+}
+
 /// Refuse unsupported bus masters before changing any hardware.
 pub unsafe fn check() -> Result<(), &'static str> {
     unsafe {
@@ -46,6 +70,7 @@ pub unsafe fn stop() {
     unsafe {
         asm!("cpsid if", options(nostack, preserves_flags));
         check().expect("Bus master changed before handoff");
+        progress("Boot 1/6: storage");
         // Finish card transactions before resetting either controller.
         for (slot, base) in [(55, 0x4037_0000), (56, 0x4038_0000)] {
             if clocked(slot) {
@@ -55,12 +80,14 @@ pub unsafe fn stop() {
                 wait(base + 0x2c, 1 << 24, 0);
             }
         }
+        progress("Boot 2/6: USB");
         if clocked(51) {
             write(0x4033_0148, 0);
             write(0x4033_0140, read(0x4033_0140) & !1);
             write(0x4033_0140, read(0x4033_0140) | 2);
             wait(0x4033_0140, 2, 0);
         }
+        progress("Boot 3/6: DMA");
         if clocked(8) {
             write(0x4008_000c, 0);
             write(0x4008_0000, read(0x4008_0000) | (1 << 5));
@@ -75,6 +102,7 @@ pub unsafe fn stop() {
                 }
             }
         }
+        progress("Boot 4/6: watchdogs");
         for (slot, base) in [(61, 0x403d_0000), (67, 0x4043_0000)] {
             let gate = 0x403f_0000 + slot * 4;
             write(gate, read(gate) | (1 << 30));
@@ -93,12 +121,12 @@ pub unsafe fn stop() {
                 assert!(read(base) & (1 << 7) == 0, "Watchdog still enabled");
             }
         }
+        progress("Boot 5/6: MU");
         if clocked(34) {
             write(0x4022_0064, read(0x4022_0064) & 0xffff);
         }
-        // Preserve LCD timing and framebuffer; the kernel restarts RUN for each frame.
-        write(0x40aa_0008, 1);
-        wait(0x40aa_0000, 1, 0);
+        // Do not abort an in-flight panel transfer by clearing RUN.
+        progress("Boot 6/6: MMU -> Linux");
         asm!(
             "mov r0, #0",
             "mcr p15, 0, r0, c14, c2, 1",
