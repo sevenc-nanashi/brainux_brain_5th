@@ -1,0 +1,49 @@
+/dts-v1/;
+#include "imx7ulp.dtsi"
+
+/ {
+    model = "Sharp Brain PW-H1 (Brainux warm boot)";
+    compatible = "sharp,pw-h1-brainux", "fsl,imx7ulp";
+    /delete-node/ reserved-memory;
+    /delete-node/ heartbeat-rpmsg;
+    /delete-node/ rtc-rpmsg;
+    memory@61000000 {
+        device_type = "memory";
+        reg = <0x61000000 0x07000000>;
+    };
+    chosen {
+        bootargs = "console=tty0 console=ttyLP0,115200 rdinit=/init clk_ignore_unused loglevel=7 fbcon=rotate:1";
+        stdout-path = "serial0:115200n8";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        framebuffer@60a00008 {
+            compatible = "simple-framebuffer";
+            reg = <0x60a00008 0xc8280>;
+            width = <480>;
+            height = <854>;
+            stride = <960>;
+            format = "r5g6b5";
+        };
+    };
+    lcd-refresh@40aa0000 {
+        compatible = "sharp,pwh1-lcd-refresh";
+        reg = <0x40aa0000 0x10>;
+    };
+};
+&cpu0 { /delete-property/ operating-points-v2; };
+&mu { status = "disabled"; };
+&mu_lp { status = "disabled"; };
+&nmi { status = "disabled"; };
+&crypto { status = "disabled"; };
+&edma1 { status = "disabled"; };
+&gpu { status = "disabled"; };
+&lcdif { status = "disabled"; };
+&wdog1 { status = "disabled"; };
+&wdog2 { status = "disabled"; };
+&lpuart4 { status = "okay"; };
+// Keep the firmware's SD pin mux and power settings during initial bring-up.
+&usdhc0 { status = "okay"; bus-width = <4>; broken-cd; no-1-8-v; };
+&usdhc1 { status = "disabled"; };
+&usbotg1 { status = "okay"; dr_mode = "peripheral"; disable-over-current; };
+&usbphy1 { status = "okay"; };

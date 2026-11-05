@@ -1,64 +1,99 @@
-# Brainux 第5世代移植
+# Brainux on PW-H1
 
-対象は **PW-H1 / V690_H1**。現時点では **Linuxは起動しない**。
-このリポジトリには、移植に先立って実機のCPU・アドレス変換を調べる
-`BrainuxProbe` を実装している。起動ローダー・Linuxカーネル・rootfsは未実装／未同梱。
+PW-H1 / V690_H1の追加アプリからLinuxへ移行する実験用ローダー。
+`AppContext.exec_path` と同じフォルダーからカーネル・DTBを読み込むため、本体／SDのどちらに配置しても使える。
 
-既存のPW-H1用Linuxデバイスツリーには、実機資料と一致しないRAM容量などが残っている。
-調査結果と次の実装箇所は [docs/bringup.md](docs/bringup.md) に記録した。
+**診断ログの保存とメモリマッピングは実機確認済み。Linuxへの移行、画面更新、USB、SDは実機未検証。**
+ネイティブのキーボード・タッチ・音声・電源管理は未対応。初期操作にはUSBシリアルを使う。
+
+## 生成物と起動
+
+`make image` は `target/APP/Brainux/` に次を生成する。
+
+- `AppMain.bin`: 純正OS上で動くローダー。
+- `BOOT.BIN`: ARM Linux Image・initramfs・PW-H1 DTB・SHA-256。
+- `index.din`: 空の追加アプリ識別ファイル。
+- `FONT-LICENSE.txt`: Reflexのフォントライセンス。
+
+フォルダー全体を本体またはSDの追加アプリ置き場へコピーする。
+起動時に `BOOT.BIN verified` が出たら、Enter、続いてBでLinuxへ移る。Escは移行前のキャンセル。
+移行後は純正OSへreturnしない。戻す場合は本体のリセット操作が必要。
+読み込み・サイズ・チェックサム・DTB・マッピングのエラーではLinuxを起動しない。
+周辺機器の停止中に異常を検出した場合はpanic画面で停止する。この段階では純正OSには戻れない。
+
+USBをPCにつなぐと、起動したinitramfsがUSB CDC ACMを公開する構成。
+Linuxホストでは `/dev/ttyACM*`、Windowsでは対応するCOMポートを開く（115200）。
+**initramfsのUSBコンソールは診断用の認証なしrootシェル**。
+UARTは `ttyLP0`。本体画面は既存RGB565バッファを使い、33 msごとに表示転送を要求する。
 
 ## ビルド
 
-隣の `../brain_5th_hack` にあるReflexとその起動コードを再利用する。
-参照時のコミットは `0b9553617cdc5dba191cac4a1b5fc55ba8b31d36`。
-path依存なので、そのディレクトリの実際の内容でビルドされる。
-ファームウェアのバイナリ自体はビルドに不要。
+必要なもの:
 
-Rust（edition 2024対応）、GNU Make、`llvm-objcopy-20` が必要。
+- Rust（edition 2024対応）、`armv7a-none-eabi` ターゲット。
+- 隣の `../brain_5th_hack` にあるReflex。参照時のコミットは
+  `0b9553617cdc5dba191cac4a1b5fc55ba8b31d36`。path依存なのでローカルの変更も反映される。
+- GNU Make、Ruby、Git、`llvm-objcopy-20`。
+- カーネル用: `arm-linux-gnueabi-gcc` と対応するbinutils・libc開発ファイル、
+  ホストCコンパイラ、bison、flex、bc、OpenSSL開発ファイル。
 
 ```sh
 rustup target add armv7a-none-eabi
+make fetch       # LinuxとBusyBoxのソースをtarget配下へ取得
+make image       # カーネル、initramfs、DTB、ローダー、BOOT.BIN
 make check
-make
+cargo run --locked --features host --bin bundle-check -- target/APP/Brainux/BOOT.BIN
 ```
 
-Cargoやobjcopyの場所は `make CARGO=/path/to/cargo OBJCOPY=/path/to/llvm-objcopy` で指定できる。
-整形は `make fmt`。ARM向けclippyとリンク時の領域・エントリーポイント検査を行う。
+Linuxは `brain-hackers/linux-brain` の `5e99ce4dc22d77bb029133d7aa6483486c684f20`、
+BusyBoxは `1_36_1` を使う。既存ディレクトリがある場合、`make fetch` は上書きしない。
+`make linux` は指定したLinuxソースへ `kernel/pwh1.patch` とボードファイルを適用する。
+作業中の別チェックアウトではなく、この用途の専用コピーを指定すること。
 
-## 実機での採取
+```sh
+LINUX=/path/to/linux BUSYBOX_SRC=/path/to/busybox \
+  CROSS_COMPILE=arm-linux-gnueabi- JOBS=4 make linux
+make loader CARGO=/path/to/cargo OBJCOPY=/path/to/llvm-objcopy
+```
 
-1. `target/APP/BrainuxProbe/` の `AppMain.bin` を、本体に配置済みのアプリへ上書きする。
-   新規配置の場合は空の `index.din` と `FONT-LICENSE.txt` も同梱する。
-2. 純正OSの追加アプリから `BrainuxProbe` を起動する。
-3. `Saved: BUXPROBE.TXT next to app` と表示されたら、Escで終了する。
-4. アプリと同じフォルダーの `BUXPROBE.TXT` を取り出す。
-   本体・SDのどちらから起動しても、配置先に保存する。
+整形は `make fmt`（Rust）。CはLinuxのスタイル、Ruby・シェルは既存の小さなスクリプト形式を使う。
+通常の検査はARM向けclippy。ELFのエントリー・コード／データ／ページテーブル／ペイロード領域はリンク時ASSERTで検査する。
+`bundle-check` はローダーと同じ検証コードをホストで実行する。
 
-左右キー／ページキーでレポートを閲覧できる。Enterは同じ採取結果の保存を再試行する。
-保存先は `AppContext.exec_path` から取得する。statでディレクトリーかファイルかを判別し、アプリのフォルダーへ保存する。
-open・write・flush・closeの失敗は画面に表示する。
-再起動や再保存では、同名の `BUXPROBE.TXT` を上書きする。
+## Brainuxのrootfsへ進む
 
-採取する内容:
+最初の `BOOT.BIN` には診断用BusyBox initramfsを含む。Debian/Brainuxのrootfs自体は含めない。
+[buildbrain](https://github.com/brain-hackers/buildbrain) で作成したARM用Brainux rootfsをSDのext4パーティションへ配置する。
+既存のi.MX283用カーネル・DTBは使わず、このリポジトリのカーネルを使う。
 
-- CPSR、MIDR、SCTLR、TTBCR、TTBR0/1、DACR、CTR、CLIDR、VBAR、CNTFRQ。
-- アプリ、スタック、ヒープ、フレームバッファ、周辺機器の仮想→物理アドレス変換。
-- 静的解析のRAM別名・追加アプリ領域について、4 KiB単位の変換結果の照合。
+本体の内蔵eMMCはLinuxのDTで無効化している。Linux側の `mmcblk0` はSD用コントローラーのみ。
+SDのフォーマット・イメージ書き込みはこのリポジトリのスクリプトでは行わない。
 
-変換はATS1CPRで調べ、対象アドレスのメモリ・MMIOは読み出さない。
-PARと割り込みマスクは各照会の前後で保存・復元する。
-MMU無効またはlong-descriptor形式の場合は、その旨を記録し変換照会を行わない。
-RAM容量やMMIOデバイスの応答可否を検査するものではない。
-watchdog・DMAの稼働状態やCortex-M4との通信状態は、まだ採取していない。
+rootfsをSDへ配置する前に、展開した**コピー**へUSBログインサービスを追加する。
 
-MMU・キャッシュの無効化、Linuxへのジャンプは行わない。
-アプリの配置先には診断結果の `BUXPROBE.TXT` を書き込む。
-純正OSの描画・ファイル・メモリ管理はReflexを通じて利用する。
-ファームウェア版の自動判定はなく、V690_H1以外には対応していない。
+```sh
+ruby scripts/prepare-rootfs.rb /path/to/extracted-brainux-rootfs
+```
 
-## 検証状況
+既存のサービスファイルがある場合は停止する。このサービスは通常のログインを使うため、
+Brainuxの既存ユーザー・パスワードが必要。
+初期シェルから次を実行する（実際のSDパーティションを確認すること）。
 
-ARM向けビルド・clippy・ELF構造を確認済み。実機でのログ採取・保存にも成功した。
-[採取結果](docs/bringup.md#実機ログ)では、全ページのアドレス変換が静的解析と一致している。
-アプリ終了後の復帰とLinux起動は未確認。
-以降はDMA停止、キャッシュ同期、MMU切替、カーネル起動を実機ログ付きで順に検証する。
+```sh
+boot-root /dev/mmcblk0p2
+```
+
+rootfsを最初は読み取り専用でマウントし、chroot内でinitの存在を確認してから、
+PID 1が診断シェルを終了し `switch_root` で起動する。
+rootfs側のinitやfstabが書き込み可能に再マウントする場合がある。
+終了前には `sync` を実行する。自動電源断は未対応。
+
+## 診断アプリ
+
+`make` は従来の `target/APP/BrainuxProbe/` を生成する。
+起動するとアプリと同じフォルダーへ `BUXPROBE.TXT` を保存する。
+左右／ページキーで閲覧、Enterで同じ採取結果を再保存、Escで終了する。
+同名の診断ファイルは上書きする。採取対象のMMIO自体は読み書きしない。
+
+実機ログと解析の根拠は [docs/bringup.md](docs/bringup.md)、
+ローダーのメモリ配置・移行手順・制限は [docs/boot.md](docs/boot.md) を参照。

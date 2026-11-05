@@ -1,0 +1,51 @@
+#!/bin/sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+mount -t devtmpfs devtmpfs /dev || exec /bin/sh
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mkdir -p /dev/pts /run /newroot
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /run
+printf '\nBrainux PW-H1 bring-up\n'
+# The USB console gives input before the native keyboard is ported.
+mount -t configfs configfs /sys/kernel/config
+(
+    set -e
+    cd /sys/kernel/config/usb_gadget
+    mkdir brainux
+    cd brainux
+    echo 0x1d6b > idVendor
+    echo 0x0104 > idProduct
+    mkdir -p strings/0x409 configs/c.1/strings/0x409 functions/acm.usb0
+    echo 'Brainux' > strings/0x409/manufacturer
+    echo 'PW-H1 bring-up console' > strings/0x409/product
+    echo 'USB serial' > configs/c.1/strings/0x409/configuration
+    ln -s functions/acm.usb0 configs/c.1/acm.usb0
+    attempts=0
+    while :; do
+        set -- /sys/class/udc/*
+        if [ -e "$1" ]; then break; fi
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 10 ] || exit 1
+        sleep 1
+    done
+    [ "$#" -eq 1 ]
+    echo "${1##*/}" > UDC
+) || echo 'USB gadget setup failed; use the UART console.'
+if [ -c /dev/ttyGS0 ]; then
+    (while :; do /sbin/getty -L -n -l /bin/sh 115200 ttyGS0 vt100; sleep 1; done) &
+fi
+switch_to_root() {
+    trap '' USR1
+    kill -TERM -1
+    sleep 1
+    kill -KILL -1
+    mount --move /dev /newroot/dev || return
+    mount --move /proc /newroot/proc || return
+    mount --move /sys /newroot/sys || return
+    mount --move /run /newroot/run || return
+    exec switch_root /newroot /sbin/init
+}
+trap switch_to_root USR1
+echo 'Use boot-root /dev/mmcblk0p2 to start an existing Brainux rootfs.'
+while :; do /bin/setsid /bin/cttyhack /bin/sh & wait "$!"; sleep 1; done

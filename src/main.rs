@@ -2,52 +2,13 @@
 #![no_main]
 extern crate alloc;
 
-mod cpu;
-
 use alloc::{ffi::CString, format, string::String};
+use brainux_probe::cpu::Cpu;
 use core::fmt::Write;
-use cpu::Cpu;
 use reflex::{Action, Application, Event, display, fs, peg, text};
 
-core::arch::global_asm!(
-    include_str!("../../brain_5th_hack/crates/reflex-macros/src/startup.S"),
-    options(raw)
-);
-#[global_allocator]
-static ALLOCATOR: reflex::allocator::SystemAllocator = reflex::allocator::SystemAllocator::new();
-static mut CONTEXT: *const reflex::app::AppContext = core::ptr::null();
-
-#[unsafe(no_mangle)]
-unsafe extern "C" fn __reflex_main(context: *const reflex::app::AppContext) {
-    unsafe {
-        CONTEXT = context;
-        reflex::lifecycle::start(context, main, &ALLOCATOR);
-    }
-}
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
-    reflex::lifecycle::panic(info)
-}
-
-unsafe fn report_path() -> Result<CString, String> {
-    let exec = unsafe { core::ffi::CStr::from_ptr((*CONTEXT).exec_path.cast()) };
-    let metadata =
-        unsafe { fs::metadata(exec) }.map_err(|code| format!("exec_path stat failed: {code}"))?;
-    let mut path = exec.to_bytes().to_vec();
-    if metadata.mode & 0xf000 != 0x4000 {
-        let separator = path
-            .iter()
-            .rposition(|b| *b == b'\\' || *b == b'/')
-            .ok_or_else(|| String::from("exec_path has no directory"))?;
-        path.truncate(separator + 1);
-    }
-    if !matches!(path.last(), Some(b'\\' | b'/')) {
-        path.push(b'\\');
-    }
-    path.extend_from_slice(b"BUXPROBE.TXT");
-    Ok(CString::new(path).expect("exec_path contains no interior NUL"))
-}
+mod entry;
+mod paths;
 
 struct Probe {
     path: Result<CString, String>,
@@ -57,7 +18,7 @@ struct Probe {
 }
 
 fn main() -> Probe {
-    let path = unsafe { report_path() };
+    let path = unsafe { paths::beside_app(b"BUXPROBE.TXT") };
     let report = unsafe { capture() };
     let status = match save(&path, &report) {
         Ok(()) => String::from("Saved: BUXPROBE.TXT next to app"),

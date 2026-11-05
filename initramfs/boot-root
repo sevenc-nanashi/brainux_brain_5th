@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 1 ] || { echo 'usage: boot-root /dev/mmcblk0p2' >&2; exit 1; }
+case "$1" in /dev/mmcblk0p[0-9]*) ;; *) echo 'Only the SD card is supported' >&2; exit 1 ;; esac
+[ -b "$1" ]
+mount -t ext4 -o ro "$1" /newroot
+if ! chroot /newroot /bin/sh -c 'test -x /sbin/init'; then
+    umount /newroot
+    echo 'No /sbin/init in rootfs' >&2
+    exit 1
+fi
+# PID 1 performs switch_root; a shell command cannot replace init on its own.
+kill -USR1 1

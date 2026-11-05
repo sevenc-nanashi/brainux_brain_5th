@@ -15,6 +15,7 @@ pub struct Cpu {
 }
 
 impl Cpu {
+    /// # Safety
     /// Requires privileged ARMv7-A execution on PW-H1.
     pub unsafe fn read() -> Self {
         macro_rules! mrc {
@@ -44,6 +45,7 @@ impl Cpu {
     }
 
     /// ATS1CPR tests privileged read access without reading the target address.
+    /// # Safety
     /// Requires enabled MMU with short descriptors; preserves PAR and IRQ/FIQ state.
     pub unsafe fn translate(&self, address: u32) -> Result<u32, u32> {
         assert!(self.supports_translation_probe());
