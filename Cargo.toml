@@ -1,0 +1,15 @@
+[package]
+name = "brainux-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+reflex = { path = "../brain_5th_hack/crates/reflex", features = ["application", "panic-screen"] }
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = "s"
+codegen-units = 1
+

@@ -1,0 +1,42 @@
+Brainux PW-H1 boot probe v1
+Target: V690_H1 (not auto-detected)
+CPSR=a000011f
+MIDR=410fc075
+SCTLR=00c5187d
+TTBCR=00000000
+TTBR0=60500019
+TTBR1=60500019
+DACR=55555555
+CTR=84448003
+CLIDR=0a200023
+VBAR=60010000
+CNTFRQ=00000000
+
+Privileged read translations (VA -> PA):
+entry: 90000000 -> 67100000
+data: 90500000 -> 67600000
+app-end: 90efffff -> 67ffffff
+app-alias: 91000000 -> 67100000
+stack: 91eff844 -> 604ff844
+report-heap: 8c010364 -> 60210364
+dram-alias: 30000000 -> 60000000
+dram: 60000000 -> 60000000
+framebuffer: 60a00008 -> 60a00008
+app-physical: 67100000 -> 67100000
+gic: 40021000 -> 40021000
+edma: 40080000 -> 40080000
+mu: 40220000 -> 40220000
+usb: 40330000 -> 40330000
+usdhc0: 40370000 -> 40370000
+usdhc1: 40380000 -> 40380000
+wdog1: 403d0000 -> 403d0000
+wdog2: 40430000 -> 40430000
+lcdif: 40aa0000 -> 40aa0000
+tstmr: 410a3c00 -> 410a3c00
+
+Static map checks (every 4 KiB page):
+30000000 +08000000 -> 60000000 OK
+60f00000 +07100000 -> 60f00000 OK
+90000000 +00f00000 -> 67100000 OK
+
+No MMU/cache shutdown or Linux jump performed.
