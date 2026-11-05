@@ -29,4 +29,5 @@ else
     echo 'debugfs mount failed'
 fi
 echo 'USB driver messages:'
-dmesg | sed -n -E '/ci_hdrc|40330000|40330200|40350000|usbmisc|syscon|supplier|deferred/p' | tail -n 8
+dmesg | sed -n -E '/ci_hdrc|40330000|40330200|40350000|usbmisc|syscon|supplier|deferred/p' |
+    tail -n 8 | sed -E 's/^\[[^]]*\] *//; s/^mxs_phy 40350000.usb-phy: /PHY: /; s/^ci_hdrc ci_hdrc\.[0-9]+: /CI: /'

@@ -65,6 +65,48 @@ index 71e0b939f..2f3f35a2b 100644
  	}
  
  	hw = clk_hw_register_composite(NULL, name, parent_names, num_parents,
+diff --git a/drivers/usb/phy/phy-mxs-usb.c b/drivers/usb/phy/phy-mxs-usb.c
+index e94e5bae7..5d2b0db56 100644
+--- a/drivers/usb/phy/phy-mxs-usb.c
++++ b/drivers/usb/phy/phy-mxs-usb.c
+@@ -339,6 +339,8 @@ static int mxs_phy_pll_enable(void __iomem *base, bool enable)
+ 		u32 value;
+ 
+ 		writel(BM_USBPHY_PLL_REG_ENABLE, base + HW_USBPHY_PLL_SIC_SET);
++		/* i.MX7ULP regulator stabilization, as in U-Boot's USB PLL setup. */
++		udelay(15);
+ 		writel(BM_USBPHY_PLL_BYPASS, base + HW_USBPHY_PLL_SIC_CLR);
+ 		writel(BM_USBPHY_PLL_POWER, base + HW_USBPHY_PLL_SIC_SET);
+ 		ret = readl_poll_timeout(base + HW_USBPHY_PLL_SIC,
+@@ -384,13 +386,26 @@ static int mxs_phy_hw_init(struct mxs_phy *mxs_phy)
+ 
+ 	if (is_imx7ulp_phy(mxs_phy) || is_imx8ulp_phy(mxs_phy)) {
+ 		ret = mxs_phy_pll_enable(base, true);
+-		if (ret)
++		if (ret) {
++			unsigned int sim;
++
++			dev_err(mxs_phy->phy.dev, "PLL lock timeout: SIC=%08x\n",
++				readl(base + HW_USBPHY_PLL_SIC));
++			dev_err(mxs_phy->phy.dev, "PHY reset state: CTRL=%08x\n",
++				readl(base + HW_USBPHY_CTRL));
++			if (mxs_phy->regmap_sim &&
++			    !regmap_read(mxs_phy->regmap_sim, 0x3c, &sim))
++				dev_err(mxs_phy->phy.dev, "SIM_MISC_CTRL0=%08x\n", sim);
+ 			return ret;
++		}
+ 	}
+ 
+ 	ret = stmp_reset_block(base + HW_USBPHY_CTRL);
+-	if (ret)
++	if (ret) {
++		dev_err(mxs_phy->phy.dev, "PHY reset timeout: CTRL=%08x\n",
++			readl(base + HW_USBPHY_CTRL));
+ 		goto disable_pll;
++	}
+ 
+ 	if (mxs_phy->phy_3p0) {
+ 		ret = regulator_enable(mxs_phy->phy_3p0);
 diff --git a/drivers/video/fbdev/Makefile b/drivers/video/fbdev/Makefile
 index fc1f85d8b..4bbee21b7 100644
 --- a/drivers/video/fbdev/Makefile
