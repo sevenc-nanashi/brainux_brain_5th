@@ -65,6 +65,16 @@ index 71e0b939f..2f3f35a2b 100644
  	}
  
  	hw = clk_hw_register_composite(NULL, name, parent_names, num_parents,
+diff --git a/drivers/input/keyboard/Makefile b/drivers/input/keyboard/Makefile
+index b75d44614..65405caf8 100644
+--- a/drivers/input/keyboard/Makefile
++++ b/drivers/input/keyboard/Makefile
+@@ -77,3 +77,5 @@ obj-$(CONFIG_KEYBOARD_TEGRA)		+= tegra-kbc.o
+ obj-$(CONFIG_KEYBOARD_TM2_TOUCHKEY)	+= tm2-touchkey.o
+ obj-$(CONFIG_KEYBOARD_TWL4030)		+= twl4030_keypad.o
+ obj-$(CONFIG_KEYBOARD_XTKBD)		+= xtkbd.o
++
++obj-$(CONFIG_INPUT_KEYBOARD) += pwh1-keys.o
 diff --git a/drivers/usb/phy/phy-mxs-usb.c b/drivers/usb/phy/phy-mxs-usb.c
 index e94e5bae7..f2019689d 100644
 --- a/drivers/usb/phy/phy-mxs-usb.c
