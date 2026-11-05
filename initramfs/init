@@ -6,9 +6,10 @@ mount -t sysfs sysfs /sys
 mkdir -p /dev/pts /run /newroot
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
-printf '\nBrainux PW-H1 bring-up\n'
+printf '\nBrainux PW-H1 initramfs started (diag 6)\n'
 # The USB console gives input before the native keyboard is ported.
 mount -t configfs configfs /sys/kernel/config
+echo 'USB: configuring serial console'
 (
     set -e
     cd /sys/kernel/config/usb_gadget
@@ -22,6 +23,7 @@ mount -t configfs configfs /sys/kernel/config
     echo 'USB serial' > configs/c.1/strings/0x409/configuration
     ln -s functions/acm.usb0 configs/c.1/acm.usb0
     attempts=0
+    echo 'USB: waiting for controller'
     while :; do
         set -- /sys/class/udc/*
         if [ -e "$1" ]; then break; fi
@@ -31,7 +33,8 @@ mount -t configfs configfs /sys/kernel/config
     done
     [ "$#" -eq 1 ]
     echo "${1##*/}" > UDC
-) || echo 'USB gadget setup failed; use the UART console.'
+    echo "USB: serial console bound to ${1##*/}"
+) || echo 'USB gadget setup failed'
 if [ -c /dev/ttyGS0 ]; then
     (while :; do /sbin/getty -L -n -l /bin/sh 115200 ttyGS0 vt100; sleep 1; done) &
 fi

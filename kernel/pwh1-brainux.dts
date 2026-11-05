@@ -12,8 +12,7 @@
         reg = <0x61000000 0x07000000>;
     };
     chosen {
-        bootargs = "console=tty0 console=ttyLP0,115200 rdinit=/init clk_ignore_unused loglevel=7 fbcon=rotate:1";
-        stdout-path = "serial0:115200n8";
+        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=8 initcall_debug fbcon=rotate:1";
         #address-cells = <1>;
         #size-cells = <1>;
         ranges;
@@ -42,7 +41,6 @@
 &lcdif { status = "disabled"; };
 &wdog1 { status = "disabled"; };
 &wdog2 { status = "disabled"; };
-&lpuart4 { status = "okay"; };
 // Keep the firmware's SD pin mux and power settings during initial bring-up.
 &usdhc0 { status = "okay"; bus-width = <4>; broken-cd; no-1-8-v; };
 &usdhc1 { status = "disabled"; };
