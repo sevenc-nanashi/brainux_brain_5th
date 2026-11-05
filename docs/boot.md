@@ -101,3 +101,7 @@ USB接続時にノイズが出て抜くと消える実機報告があるが、�
 diag 7ではUSB PHYのSIMレジスター取得に必要な `CONFIG_MFD_SYSCON` を有効化する。
 これが無効だとPHYのprobeは `-ENOTSUPP` で失敗する。ビルド時にも必須設定として検査する。
 USB設定は独立した `sh -e` で実行し、失敗時はUSB関連のカーネルログを画面に表示する。
+diag 8では大量の出力を避けるため `initcall_debug` を外し、カーネルのconsole loglevelを4にする。
+initramfs開始後は緊急メッセージ以外を画面に流さず、USB設定後に画面を消去して結果を表示する。
+USB設定とgettyの詳細はRAM上の `/run/usb-setup.log`・`/run/usb-getty.log` に保存し、カーネルログは `dmesg` で取得できる。
+これはログで結果が流れる問題への対処であり、USB接続時の表示ノイズを解決したことは実機未確認。

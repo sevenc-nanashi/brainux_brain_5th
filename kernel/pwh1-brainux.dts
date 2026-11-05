@@ -12,7 +12,7 @@
         reg = <0x61000000 0x07000000>;
     };
     chosen {
-        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=8 initcall_debug fbcon=rotate:1";
+        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1";
         #address-cells = <1>;
         #size-cells = <1>;
         ranges;
