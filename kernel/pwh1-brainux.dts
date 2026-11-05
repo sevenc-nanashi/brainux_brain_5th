@@ -7,6 +7,15 @@
     /delete-node/ reserved-memory;
     /delete-node/ heartbeat-rpmsg;
     /delete-node/ rtc-rpmsg;
+    reserved-memory {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        framebuffer@66e00000 {
+            reg = <0x66e00000 0x00100000>;
+            no-map;
+        };
+    };
     memory@61000000 {
         device_type = "memory";
         reg = <0x61000000 0x07000000>;
@@ -16,9 +25,9 @@
         #address-cells = <1>;
         #size-cells = <1>;
         ranges;
-        framebuffer@60a00008 {
+        framebuffer@66e00000 {
             compatible = "simple-framebuffer";
-            reg = <0x60a00008 0xc8280>;
+            reg = <0x66e00000 0xc8280>;
             width = <480>;
             height = <854>;
             stride = <960>;

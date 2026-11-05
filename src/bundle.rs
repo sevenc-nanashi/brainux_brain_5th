@@ -4,6 +4,9 @@ pub const CAPACITY: usize = 9 * 1024 * 1024;
 pub const MAX_IMAGE: usize = CAPACITY - 64 - 65536;
 pub const IMAGE_DEST: u32 = 0x6100_8000;
 pub const DTB_DEST: u32 = 0x6700_0000;
+pub const FRAMEBUFFER: u32 = 0x66e0_0000;
+pub const FRAMEBUFFER_RESERVE: u32 = 0x0010_0000;
+pub const FRAME_BYTES: u32 = 480 * 854 * 2;
 
 pub struct Bundle<'a> {
     pub image: &'a [u8],
@@ -56,6 +59,29 @@ impl<'a> Bundle<'a> {
         {
             return Err("DTB cell sizes mismatch");
         }
+        let reserved = tree
+            .find_node("/reserved-memory")
+            .ok_or("DTB framebuffer reservation missing")?;
+        if reserved.property("#address-cells").map(|p| p.value) != Some(&[0, 0, 0, 1])
+            || reserved.property("#size-cells").map(|p| p.value) != Some(&[0, 0, 0, 1])
+            || reserved.property("ranges").map(|p| p.value) != Some(&[])
+        {
+            return Err("DTB reservation addressing mismatch");
+        }
+        let reservation = tree
+            .find_node("/reserved-memory/framebuffer@66e00000")
+            .ok_or("DTB framebuffer reservation missing")?;
+        let framebuffer = tree
+            .find_node("/chosen/framebuffer@66e00000")
+            .ok_or("DTB framebuffer address mismatch")?;
+        if reservation.property("reg").map(|p| p.value) != Some(&[0x66, 0xe0, 0, 0, 0, 0x10, 0, 0])
+            || reservation.property("no-map").map(|p| p.value) != Some(&[])
+            || reservation.property("reusable").is_some()
+            || framebuffer.property("reg").map(|p| p.value)
+                != Some(&[0x66, 0xe0, 0, 0, 0, 0x0c, 0x82, 0x80])
+        {
+            return Err("DTB framebuffer reservation/layout mismatch");
+        }
         Ok(bundle)
     }
 }
@@ -64,4 +90,10 @@ const _: () = {
     assert!(IMAGE_DEST + (MAX_IMAGE as u32) < DTB_DEST);
     assert!(DTB_DEST + 65536 < 0x6710_0000);
     assert!(0x6770_0000u32 + CAPACITY as u32 == 0x6800_0000);
+    assert!(IMAGE_DEST + (MAX_IMAGE as u32) < FRAMEBUFFER);
+    assert!(FRAME_BYTES < FRAMEBUFFER_RESERVE);
+    assert!(FRAMEBUFFER + FRAMEBUFFER_RESERVE <= DTB_DEST);
+    assert!(FRAMEBUFFER == 0x66e0_0000); // handoff.S and DTB profile
+    assert!(FRAME_BYTES == 0xc8280);
+    assert!(FRAMEBUFFER_RESERVE == 0x0010_0000);
 };

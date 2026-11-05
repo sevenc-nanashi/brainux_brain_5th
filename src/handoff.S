@@ -8,7 +8,7 @@
 // Three 16-pixel-wide bars, using no stack and preserving the payload registers.
 .macro boot_mark offset, color
     movw r5, #\offset
-    movt r5, #0x60a0
+    movt r5, #0x66e0
     add r7, r5, #0x3c00
     mov r6, r5
     movw r0, #\color
@@ -86,7 +86,7 @@ handoff:
     add r10, r10, #2
     b 1b
 5:
-    boot_mark 0x0008, 0xf800
+    boot_mark 0x0000, 0xf800
     mov r0, #0
     mcr p15, 2, r0, c0, c0, 0
     dsb sy
@@ -124,7 +124,7 @@ handoff:
     dsb sy
     isb
     // Copy byte-exactly: neither input length needs word alignment.
-    boot_mark 0x3c08, 0x001f
+    boot_mark 0x3c00, 0x001f
     movw r4, #0x8000
     movt r4, #0x6100
     mov r5, r4
@@ -141,7 +141,7 @@ handoff:
     subs lr, lr, #1
     bne 8b
     dsb sy
-    boot_mark 0x7808, 0x07e0
+    boot_mark 0x7800, 0x07e0
     // Linux owns SVC's stack from here; do not use the firmware's banked stack.
     cps #0x13
     mov r0, #0

@@ -6,7 +6,9 @@ mod paths;
 mod quiesce;
 
 use alloc::{format, string::String};
-use brainux_probe::bundle::{Bundle, CAPACITY, DTB_DEST, IMAGE_DEST};
+use brainux_probe::bundle::{
+    Bundle, CAPACITY, DTB_DEST, FRAMEBUFFER, FRAMEBUFFER_RESERVE, IMAGE_DEST,
+};
 use core::{arch::global_asm, ptr};
 use reflex::{Action, Application, Event, display, fs, peg, text};
 
@@ -41,6 +43,11 @@ unsafe fn verify_mapping() -> Result<(), &'static str> {
             || unsafe { cpu.translate(0x6710_0000 + offset) } != Ok(0x6710_0000 + offset)
         {
             return Err("App/identity mapping mismatch");
+        }
+    }
+    for offset in (0..FRAMEBUFFER_RESERVE).step_by(4096) {
+        if unsafe { cpu.translate(FRAMEBUFFER + offset) } != Ok(FRAMEBUFFER + offset) {
+            return Err("Reserved framebuffer mapping mismatch");
         }
     }
     for address in [
@@ -170,7 +177,7 @@ impl Application for Loader {
         }
         if self.armed && (code == b'B' as u16 || code == b'b' as u16) {
             unsafe {
-                quiesce::progress("Boot: B received (display 1)");
+                quiesce::progress("Boot: B received (display 2)");
                 if let Err(error) = quiesce::check() {
                     self.status = String::from(error);
                     self.armed = false;
@@ -213,7 +220,7 @@ impl Application for Loader {
     fn draw(&self, pixels: &mut [u16]) {
         pixels.fill(0xffff);
         for (y, line) in [
-            (30, "Brainux / PW-H1 Linux loader (display 1)"),
+            (30, "Brainux / PW-H1 Linux loader (display 2)"),
             (90, self.status.as_str()),
             (160, "Image -> 61008000   DTB -> 67000000"),
             (210, "USB serial console: 115200 / ttyGS0"),

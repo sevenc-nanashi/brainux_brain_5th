@@ -22,14 +22,18 @@ unsafe fn wait(address: usize, mask: u32, expected: u32) {
     }
 }
 
-const FRAMEBUFFER: usize = 0x60a0_0008;
+const FRAMEBUFFER: usize = brainux_probe::bundle::FRAMEBUFFER as usize;
+const FIRMWARE_FRAMEBUFFER: usize = 0x60a0_0008;
 const PEG_FRAMEBUFFER: usize = 0x60ac_a810;
 const FRAME_BYTES: usize = reflex::display::WIDTH * reflex::display::HEIGHT * 2;
 
 unsafe fn displayed_buffer() -> usize {
     let address = unsafe { read(0x40aa_0040) } as usize;
     assert!(
-        matches!(address, FRAMEBUFFER | PEG_FRAMEBUFFER),
+        matches!(
+            address,
+            FRAMEBUFFER | FIRMWARE_FRAMEBUFFER | PEG_FRAMEBUFFER
+        ),
         "Unknown LCD buffer: {address:08x}"
     );
     address
@@ -47,7 +51,7 @@ unsafe fn present_buffer(address: usize) {
     }
 }
 
-unsafe fn select_linux_buffer() {
+unsafe fn select_buffer(destination: usize) {
     unsafe {
         // Match mxsfb's continuous-scanout setup before the uncached Image copy.
         write(0x40aa_0014, 1 << 24);
@@ -68,21 +72,22 @@ unsafe fn select_linux_buffer() {
         let source = displayed_buffer() as *const u16;
         for pixel in 0..FRAME_BYTES / 2 {
             write_volatile(
-                (FRAMEBUFFER as *mut u16).add(pixel),
+                (destination as *mut u16).add(pixel),
                 read_volatile(source.add(pixel)),
             );
         }
-        present_buffer(FRAMEBUFFER);
+        present_buffer(destination);
         // DOTCLK scanout latches NEXT_BUF at a frame boundary; do not stop RUN.
-        write(0x40aa_0050, FRAMEBUFFER as u32);
+        write(0x40aa_0050, destination as u32);
         asm!("dsb sy", options(nostack, preserves_flags));
-        wait(0x40aa_0040, u32::MAX, FRAMEBUFFER as u32);
+        wait(0x40aa_0040, u32::MAX, destination as u32);
     }
 }
 
 const _: () = {
     assert!(FRAME_BYTES == 0xc8280);
-    assert!(FRAMEBUFFER + FRAME_BYTES <= PEG_FRAMEBUFFER);
+    assert!(FRAME_BYTES == brainux_probe::bundle::FRAME_BYTES as usize);
+    assert!(FIRMWARE_FRAMEBUFFER + FRAME_BYTES <= PEG_FRAMEBUFFER);
     assert!(PEG_FRAMEBUFFER + FRAME_BYTES < 0x6100_0000);
 };
 
@@ -139,8 +144,8 @@ pub unsafe fn stop() {
     unsafe {
         asm!("cpsid if", options(nostack, preserves_flags));
         check().expect("Bus master changed before handoff");
-        progress("Boot: selecting Linux framebuffer");
-        select_linux_buffer();
+        progress("Boot: preparing display");
+        select_buffer(FIRMWARE_FRAMEBUFFER);
         progress("Boot 1/6: storage");
         // Finish card transactions before resetting either controller.
         for (slot, base) in [(55, 0x4037_0000), (56, 0x4038_0000)] {
@@ -211,7 +216,9 @@ pub unsafe fn stop() {
         if clocked(34) {
             write(0x4022_0064, read(0x4022_0064) & 0xffff);
         }
-        // LCD keeps reading reserved firmware RAM, outside the Linux memory range.
+        // Only use dedicated RAM after firmware DMA and services have stopped.
+        progress("Boot: selecting reserved framebuffer");
+        select_buffer(FRAMEBUFFER);
         progress("Boot 6/6: MMU -> Linux");
         asm!(
             "mov r0, #0",
