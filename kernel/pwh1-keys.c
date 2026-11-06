@@ -130,7 +130,7 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 		input_set_capability(input, EV_KEY, alphabet[i]);
 	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
 		input_set_capability(input, EV_KEY, special_keys[i].key);
-	__set_bit(EV_REP, input->evbit);
+	/* shortcut: no autorepeat until firmware key-release timing is verified. */
 	ret = input_setup_polling(input, pwh1_keys_poll);
 	if (ret)
 		return ret;
