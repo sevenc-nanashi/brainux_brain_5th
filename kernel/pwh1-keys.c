@@ -12,8 +12,6 @@ struct pwh1_keys {
 	void __iomem *queue;
 	void __iomem *gate;
 	u32 discarded;
-	u32 sample;
-	u8 stable;
 	bool symbols;
 	bool mode_down;
 	u32 held;
@@ -104,7 +102,6 @@ static void pwh1_keys_poll(struct input_dev *input)
 	u8 state = readb(keys->state);
 	u32 sample = readl(keys->state + 8) & 0xffffff;
 	unsigned int i;
-	u8 required = sample ? 2 : 4;
 	bool mode_down;
 	DECLARE_BITMAP(down, KEY_CNT);
 
@@ -112,20 +109,7 @@ static void pwh1_keys_poll(struct input_dev *input)
 
 	/* State 2 is transitional; state 1 must have cleared the key bytes. */
 	if ((state != 1 && state != 3) || readb(keys->state) != state ||
-	    (state == 1 && sample)) {
-		keys->stable = 0;
-		return;
-	}
-
-	/* Debounce presses for 20 ms and all-key releases for 60 ms. */
-	if (!keys->stable || sample != keys->sample) {
-		keys->sample = sample;
-		keys->stable = 1;
-		return;
-	}
-	if (keys->stable < required)
-		keys->stable++;
-	if (keys->stable < required)
+	    (state == 1 && sample))
 		return;
 	mode_down = pwh1_key_down(sample, 0x31);
 	if (mode_down && !keys->mode_down)
@@ -242,7 +226,7 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 			input_set_capability(input, EV_KEY, symbols[i]);
 	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
 		input_set_capability(input, EV_KEY, special_keys[i].key);
-	/* shortcut: no autorepeat until firmware key-release timing is verified. */
+	__set_bit(EV_REP, input->evbit);
 	ret = input_setup_polling(input, pwh1_keys_poll);
 	if (ret)
 		return ret;
