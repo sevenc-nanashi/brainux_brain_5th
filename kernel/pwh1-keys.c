@@ -18,6 +18,24 @@ static const unsigned short alphabet[] = {
 	KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z,
 };
 static_assert(ARRAY_SIZE(alphabet) == 26);
+/* Modifiers must precede printable keys within a polling sample. */
+static const struct {
+	u8 scan;
+	unsigned short key;
+} special_keys[] = {
+	{ 0x2e, KEY_LEFTSHIFT },
+	{ 0x30, KEY_LEFTCTRL },
+	{ 0x31, KEY_LEFTALT },
+	{ 0x1d, KEY_F1 }, { 0x1e, KEY_F2 }, { 0x1f, KEY_F3 },
+	{ 0x20, KEY_F4 }, { 0x21, KEY_F5 }, { 0x22, KEY_F6 },
+	{ 0x25, KEY_ENTER }, { 0x26, KEY_ESC },
+	{ 0x27, KEY_UP }, { 0x28, KEY_RIGHT },
+	{ 0x29, KEY_DOWN }, { 0x2a, KEY_LEFT },
+	{ 0x2b, KEY_PAGEUP }, { 0x2c, KEY_PAGEDOWN },
+	{ 0x2d, KEY_BACKSPACE }, { 0x2f, KEY_SPACE },
+	{ 0x1b, KEY_MINUS },
+};
+
 
 static bool pwh1_key_down(u32 keys, u8 code)
 {
@@ -38,11 +56,11 @@ static void pwh1_keys_poll(struct input_dev *input)
 	}
 
 	/* Deliver modifiers before characters when both arrive in one scan. */
-	input_report_key(input, KEY_LEFTSHIFT, pwh1_key_down(sample, 0x2e));
+	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
+		input_report_key(input, special_keys[i].key,
+				 pwh1_key_down(sample, special_keys[i].scan));
 	for (i = 0; i < ARRAY_SIZE(alphabet); i++)
 		input_report_key(input, alphabet[i], pwh1_key_down(sample, i + 1));
-	input_report_key(input, KEY_ENTER, pwh1_key_down(sample, 0x25));
-	/* Unknown keys, including the latched power code 22, are not emitted. */
 	input_sync(input);
 }
 
@@ -97,8 +115,8 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	input_set_drvdata(input, keys);
 	for (i = 0; i < ARRAY_SIZE(alphabet); i++)
 		input_set_capability(input, EV_KEY, alphabet[i]);
-	input_set_capability(input, EV_KEY, KEY_ENTER);
-	input_set_capability(input, EV_KEY, KEY_LEFTSHIFT);
+	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
+		input_set_capability(input, EV_KEY, special_keys[i].key);
 	__set_bit(EV_REP, input->evbit);
 	ret = input_setup_polling(input, pwh1_keys_poll);
 	if (ret)
