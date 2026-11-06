@@ -2,24 +2,29 @@
 set -eu
 keys=/sys/bus/platform/devices/1fff8080.keyboard/raw_keys
 [ -r "$keys" ] || { echo 'Keyboard state unavailable' >&2; exit 1; }
-tty_mode=$(stty -g)
-trap 'stty "$tty_mode"' EXIT
+exec 3</dev/tty
+tty_mode=$(stty -g <&3)
+trap 'stty "$tty_mode" <&3' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-stty -echo -icanon min 0 time 0
+stty -echo -icanon min 1 time 0 <&3
 echo 'Press and release keys; returns in about 20 seconds.'
 echo 'Hold each key briefly. At most two keys together.'
 previous=''
-count=0
-while [ "$count" -lt 100 ]; do
+IFS=' .' read -r started rest </proc/uptime
+now=$started
+while [ "$((now - started))" -lt 20 ]; do
     current=$(cat "$keys")
     if [ "$current" != "$previous" ]; then
         printf '%s\n' "$current"
         previous=$current
     fi
-    # Consume diagnostic keystrokes so they cannot become shell commands.
-    dd bs=256 count=1 of=/dev/null 2>/dev/null
-    sleep 0.2
+    # A read timeout is normal; consume keys instead of leaving shell input.
+    IFS= read -r -n 1 -t 0.2 discarded <&3 || :
+    IFS=' .' read -r now rest </proc/uptime
+done
+# Bound the final drain even if a key is still repeating.
+count=0
+while [ "$count" -lt 256 ] && IFS= read -r -n 1 -t 0.01 discarded <&3; do
     count=$((count + 1))
 done
-dd bs=256 count=1 of=/dev/null 2>/dev/null
