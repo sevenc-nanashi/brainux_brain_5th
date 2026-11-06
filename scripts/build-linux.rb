@@ -26,6 +26,7 @@ end
 FileUtils.cp(File.join(root, 'kernel/pwh1-brainux.dts'), File.join(linux, 'arch/arm/boot/dts/imx7ulp-pwh1-brainux.dts'))
 FileUtils.cp(File.join(root, 'kernel/pwh1-refresh.c'), File.join(linux, 'drivers/video/fbdev/pwh1-refresh.c'))
 FileUtils.cp(File.join(root, 'kernel/pwh1-keys.c'), File.join(linux, 'drivers/input/keyboard/pwh1-keys.c'))
+FileUtils.cp(File.join(root, 'kernel/pwh1-power.c'), File.join(linux, 'drivers/power/reset/pwh1-power.c'))
 bb_out = File.join(root, 'target/busybox-build')
 FileUtils.mkdir_p(bb_out)
 base = ['make', '-C', busybox, "O=#{bb_out}", "CROSS_COMPILE=#{cross}"]

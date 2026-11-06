@@ -187,6 +187,15 @@ index b75d44614..65405caf8 100644
  obj-$(CONFIG_KEYBOARD_XTKBD)		+= xtkbd.o
 +
 +obj-$(CONFIG_INPUT_KEYBOARD) += pwh1-keys.o
+diff --git a/drivers/power/reset/Makefile b/drivers/power/reset/Makefile
+index 0a39424fc..92509e791 100644
+--- a/drivers/power/reset/Makefile
++++ b/drivers/power/reset/Makefile
+@@ -36,3 +36,4 @@ obj-$(CONFIG_SYSCON_REBOOT_MODE) += syscon-reboot-mode.o
+ obj-$(CONFIG_POWER_RESET_SC27XX) += sc27xx-poweroff.o
+ obj-$(CONFIG_NVMEM_REBOOT_MODE) += nvmem-reboot-mode.o
+ obj-$(CONFIG_POWER_MLXBF) += pwr-mlxbf.o
++obj-$(CONFIG_POWER_RESET) += pwh1-power.o
 diff --git a/drivers/power/reset/syscon-reboot.c b/drivers/power/reset/syscon-reboot.c
 index 510e36338..0d548cf40 100644
 --- a/drivers/power/reset/syscon-reboot.c
