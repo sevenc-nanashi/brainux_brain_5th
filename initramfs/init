@@ -8,7 +8,7 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 25)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 26)\n'
 if [ -e /proc/device-tree/chosen/brainux,display-only ]; then
     echo 'Display check: USB disabled, CPU idle polling.'
 else
@@ -41,7 +41,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 25)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 26)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
@@ -69,20 +69,13 @@ switch_to_root() {
 }
 trap switch_to_root USR1
 # BusyBox reboot signals PID 1; the initramfs uses this shell as init.
-trap 'echo "Reboot: PID 1 received request"; sync; echo "Reboot: calling kernel"; /bin/busybox reboot -f' TERM
-if [ -L /sys/bus/platform/devices/reboot/driver ]; then
+trap 'echo "Reboot: syncing filesystems"; sync; /bin/busybox reboot -f' TERM
+trap 'echo "Poweroff is unsupported; use reboot."' USR2
+if [ -L /sys/bus/platform/devices/4103d058.reboot/driver ]; then
     echo 'Reset driver: bound'
 else
     echo 'Reset driver: MISSING'
 fi
-trap 'echo "Poweroff: syncing filesystems"; sync; /bin/busybox poweroff -f' USR2
-if [ -L /sys/bus/platform/devices/4103d058.poweroff/driver ]; then
-    echo 'Poweroff driver: bound (experimental)'
-else
-    echo 'Poweroff driver: MISSING'
-fi
-echo 'Type poweroff to shut down (experimental).'
-echo 'Type reboot, then press Power to start the original system.'
-
+echo 'Type reboot to start the original system.'
 echo 'Use boot-root /dev/mmcblk0p2 to start an existing Brainux rootfs.'
 while :; do setsid cttyhack /bin/sh & wait "$!"; sleep 1; done

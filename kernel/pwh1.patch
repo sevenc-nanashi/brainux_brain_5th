@@ -1,35 +1,3 @@
-diff --git a/arch/arm/kernel/reboot.c b/arch/arm/kernel/reboot.c
-index 3f0d5c3da..f7185b1d9 100644
---- a/arch/arm/kernel/reboot.c
-+++ b/arch/arm/kernel/reboot.c
-@@ -6,6 +6,7 @@
- #include <linux/cpu.h>
- #include <linux/delay.h>
- #include <linux/reboot.h>
-+#include <linux/of.h>
- 
- #include <asm/cacheflush.h>
- #include <asm/idmap.h>
-@@ -133,9 +134,19 @@ void machine_power_off(void)
-  */
- void machine_restart(char *cmd)
- {
-+	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
-+
-+	if (pwh1) {
-+		pr_emerg("PWH1: machine restart\n");
-+		mdelay(2000);
-+	}
- 	local_irq_disable();
- 	smp_send_stop();
- 
-+	if (pwh1) {
-+		pr_emerg("PWH1: IRQ off, calling reset\n");
-+		mdelay(2000);
-+	}
- 	do_kernel_restart(cmd);
- 
- 	/* Give a grace period for failure to restart of 1s */
 diff --git a/arch/arm/mach-imx/common.c b/arch/arm/mach-imx/common.c
 index 5368497ac..1936e1106 100644
 --- a/arch/arm/mach-imx/common.c
@@ -67,86 +35,6 @@ index 6ab1a0176..955190a79 100644
  	if (IS_ENABLED(CONFIG_ARM_IMX_CPUFREQ_DT))
  		platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
  
-diff --git a/drivers/base/core.c b/drivers/base/core.c
-index af90bfb0c..7696ea942 100644
---- a/drivers/base/core.c
-+++ b/drivers/base/core.c
-@@ -4770,10 +4770,17 @@ EXPORT_SYMBOL_GPL(device_change_owner);
- void device_shutdown(void)
- {
- 	struct device *dev, *parent;
-+	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
- 
-+	if (pwh1)
-+		pr_emerg("PWH1: wait for probes\n");
- 	wait_for_device_probe();
-+	if (pwh1)
-+		pr_emerg("PWH1: block probes\n");
- 	device_block_probing();
- 
-+	if (pwh1)
-+		pr_emerg("PWH1: cpufreq suspend\n");
- 	cpufreq_suspend();
- 
- 	spin_lock(&devices_kset->list_lock);
-@@ -4800,6 +4807,8 @@ void device_shutdown(void)
- 		list_del_init(&dev->kobj.entry);
- 		spin_unlock(&devices_kset->list_lock);
- 
-+		if (pwh1)
-+			pr_emerg("PWH1: lock %s\n", dev_name(dev));
- 		/* hold lock to avoid race with probe/release */
- 		if (parent)
- 			device_lock(parent);
-@@ -4807,7 +4816,11 @@ void device_shutdown(void)
- 
- 		/* Don't allow any more runtime suspends */
- 		pm_runtime_get_noresume(dev);
-+		if (pwh1)
-+			pr_emerg("PWH1: PM %s\n", dev_name(dev));
- 		pm_runtime_barrier(dev);
-+		if (pwh1)
-+			pr_emerg("PWH1: stop %s\n", dev_name(dev));
- 
- 		if (dev->class && dev->class->shutdown_pre) {
- 			if (initcall_debug)
-diff --git a/drivers/base/syscore.c b/drivers/base/syscore.c
-index 13db1f78d..b7f1fc2e1 100644
---- a/drivers/base/syscore.c
-+++ b/drivers/base/syscore.c
-@@ -6,6 +6,7 @@
-  */
- 
- #include <linux/syscore_ops.h>
-+#include <linux/of.h>
- #include <linux/mutex.h>
- #include <linux/module.h>
- #include <linux/suspend.h>
-@@ -114,15 +115,24 @@ EXPORT_SYMBOL_GPL(syscore_resume);
- void syscore_shutdown(void)
- {
- 	struct syscore_ops *ops;
-+	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
- 
-+	if (pwh1)
-+		pr_emerg("PWH1: core lock\n");
- 	mutex_lock(&syscore_ops_lock);
- 
- 	list_for_each_entry_reverse(ops, &syscore_ops_list, node)
- 		if (ops->shutdown) {
- 			if (initcall_debug)
- 				pr_info("PM: Calling %pS\n", ops->shutdown);
-+			if (pwh1)
-+				pr_emerg("PWH1: core %ps\n", ops->shutdown);
- 			ops->shutdown();
-+			if (pwh1)
-+				pr_emerg("PWH1: core done\n");
- 		}
- 
- 	mutex_unlock(&syscore_ops_lock);
-+	if (pwh1)
-+		pr_emerg("PWH1: core finished\n");
- }
 diff --git a/drivers/clk/imx/clk-composite-7ulp.c b/drivers/clk/imx/clk-composite-7ulp.c
 index 71e0b939f..2f3f35a2b 100644
 --- a/drivers/clk/imx/clk-composite-7ulp.c
@@ -188,38 +76,14 @@ index b75d44614..65405caf8 100644
 +
 +obj-$(CONFIG_INPUT_KEYBOARD) += pwh1-keys.o
 diff --git a/drivers/power/reset/Makefile b/drivers/power/reset/Makefile
-index 0a39424fc..92509e791 100644
+index 0a39424fc..5f265cb51 100644
 --- a/drivers/power/reset/Makefile
 +++ b/drivers/power/reset/Makefile
 @@ -36,3 +36,4 @@ obj-$(CONFIG_SYSCON_REBOOT_MODE) += syscon-reboot-mode.o
  obj-$(CONFIG_POWER_RESET_SC27XX) += sc27xx-poweroff.o
  obj-$(CONFIG_NVMEM_REBOOT_MODE) += nvmem-reboot-mode.o
  obj-$(CONFIG_POWER_MLXBF) += pwr-mlxbf.o
-+obj-$(CONFIG_POWER_RESET) += pwh1-power.o
-diff --git a/drivers/power/reset/syscon-reboot.c b/drivers/power/reset/syscon-reboot.c
-index 510e36338..0d548cf40 100644
---- a/drivers/power/reset/syscon-reboot.c
-+++ b/drivers/power/reset/syscon-reboot.c
-@@ -30,8 +30,17 @@ static int syscon_restart_handle(struct notifier_block *this,
- 			container_of(this, struct syscon_reboot_context,
- 					restart_handler);
- 
--	/* Issue the reboot */
--	regmap_update_bits(ctx->map, ctx->offset, ctx->mask, ctx->value);
-+	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
-+	int ret;
-+
-+	if (pwh1) {
-+		pr_emerg("PWH1: RESET IN 3 SECONDS\n");
-+		/* Leave a readable frame before resetting the firmware display path. */
-+		mdelay(3000);
-+	}
-+	ret = regmap_update_bits(ctx->map, ctx->offset, ctx->mask, ctx->value);
-+	if (pwh1)
-+		pr_emerg("PWH1: reset write returned %d\n", ret);
- 
- 	mdelay(1000);
- 
++obj-$(CONFIG_POWER_RESET) += pwh1-reset.o
 diff --git a/drivers/usb/phy/phy-mxs-usb.c b/drivers/usb/phy/phy-mxs-usb.c
 index e94e5bae7..f2019689d 100644
 --- a/drivers/usb/phy/phy-mxs-usb.c
@@ -303,46 +167,3 @@ index fc1f85d8b..4bbee21b7 100644
  obj-$(CONFIG_FB_VIRTUAL)          += vfb.o
 +
 +obj-$(CONFIG_FB_SIMPLE) += pwh1-refresh.o
-diff --git a/kernel/reboot.c b/kernel/reboot.c
-index 6ebef11c8..e3c24813b 100644
---- a/kernel/reboot.c
-+++ b/kernel/reboot.c
-@@ -14,6 +14,7 @@
- #include <linux/kmod.h>
- #include <linux/kmsg_dump.h>
- #include <linux/reboot.h>
-+#include <linux/of.h>
- #include <linux/suspend.h>
- #include <linux/syscalls.h>
- #include <linux/syscore_ops.h>
-@@ -81,8 +82,12 @@ EXPORT_SYMBOL_GPL(emergency_restart);
- 
- void kernel_restart_prepare(char *cmd)
- {
-+	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
-+		pr_emerg("PWH1: reboot notifiers\n");
- 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
- 	system_state = SYSTEM_RESTART;
-+	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
-+		pr_emerg("PWH1: disable helpers\n");
- 	usermodehelper_disable();
- 	device_shutdown();
- }
-@@ -265,9 +270,17 @@ static void do_kernel_restart_prepare(void)
-  */
- void kernel_restart(char *cmd)
- {
-+	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
-+		pr_emerg("PWH1: prepare\n");
- 	kernel_restart_prepare(cmd);
-+	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
-+		pr_emerg("PWH1: restart prepare\n");
- 	do_kernel_restart_prepare();
-+	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
-+		pr_emerg("PWH1: migrate CPU\n");
- 	migrate_to_reboot_cpu();
-+	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
-+		pr_emerg("PWH1: syscore shutdown\n");
- 	syscore_shutdown();
- 	if (!cmd)
- 		pr_emerg("Restarting system\n");
