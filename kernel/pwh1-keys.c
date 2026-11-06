@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <linux/bitmap.h>
 #include <linux/io.h>
 #include <linux/input.h>
 #include <linux/module.h>
@@ -10,6 +11,10 @@ struct pwh1_keys {
 	void __iomem *state;
 	u32 sample;
 	u8 stable;
+	bool symbols;
+	bool mode_down;
+	u32 held;
+	unsigned short pressed[26];
 };
 
 /* A=01 and Q=11 observed; the intervening alphabet is inferred. */
@@ -19,6 +24,15 @@ static const unsigned short alphabet[] = {
 	KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z,
 };
 static_assert(ARRAY_SIZE(alphabet) == 26);
+/* Alphabet scan order; Q-P are digits, A-K and Z-C are punctuation. */
+static const unsigned short symbols[] = {
+	KEY_MINUS, KEY_RESERVED, KEY_SLASH, KEY_LEFTBRACE, KEY_3, KEY_RIGHTBRACE,
+	KEY_BACKSLASH, KEY_SEMICOLON, KEY_8, KEY_APOSTROPHE, KEY_GRAVE, KEY_TAB,
+	KEY_RESERVED, KEY_RESERVED, KEY_9, KEY_0, KEY_1, KEY_4,
+	KEY_EQUAL, KEY_5, KEY_7, KEY_RESERVED, KEY_2, KEY_DOT,
+	KEY_6, KEY_COMMA,
+};
+static_assert(ARRAY_SIZE(symbols) == ARRAY_SIZE(alphabet));
 /* Modifiers must precede printable keys within a polling sample. */
 static const struct {
 	u8 scan;
@@ -26,7 +40,6 @@ static const struct {
 } special_keys[] = {
 	{ 0x2e, KEY_LEFTSHIFT },
 	{ 0x30, KEY_LEFTCTRL },
-	{ 0x31, KEY_LEFTALT },
 	{ 0x1d, KEY_F1 }, { 0x1e, KEY_F2 }, { 0x1f, KEY_F3 },
 	{ 0x20, KEY_F4 }, { 0x21, KEY_F5 }, { 0x22, KEY_F6 },
 	{ 0x25, KEY_ENTER }, { 0x26, KEY_ESC },
@@ -50,6 +63,8 @@ static void pwh1_keys_poll(struct input_dev *input)
 	u32 sample = readl(keys->state + 8) & 0xffffff;
 	unsigned int i;
 	u8 required = sample ? 2 : 4;
+	bool mode_down;
+	DECLARE_BITMAP(down, KEY_CNT);
 
 	/* State 2 is transitional; state 1 must have cleared the key bytes. */
 	if ((state != 1 && state != 3) || readb(keys->state) != state ||
@@ -68,12 +83,30 @@ static void pwh1_keys_poll(struct input_dev *input)
 		keys->stable++;
 	if (keys->stable < required)
 		return;
-	/* Deliver modifiers before characters when both arrive in one scan. */
+	mode_down = pwh1_key_down(sample, 0x31);
+	if (mode_down && !keys->mode_down)
+		WRITE_ONCE(keys->symbols, !keys->symbols);
+	keys->mode_down = mode_down;
+	bitmap_zero(down, KEY_CNT);
 	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
-		input_report_key(input, special_keys[i].key,
-				 pwh1_key_down(sample, special_keys[i].scan));
-	for (i = 0; i < ARRAY_SIZE(alphabet); i++)
-		input_report_key(input, alphabet[i], pwh1_key_down(sample, i + 1));
+		if (pwh1_key_down(sample, special_keys[i].scan))
+			__set_bit(special_keys[i].key, down);
+	for (i = 0; i < ARRAY_SIZE(alphabet); i++) {
+		if (!pwh1_key_down(sample, i + 1)) {
+			keys->pressed[i] = KEY_RESERVED;
+			keys->held &= ~BIT(i);
+		} else if (!(keys->held & BIT(i))) {
+			keys->pressed[i] = keys->symbols ? symbols[i] : alphabet[i];
+			keys->held |= BIT(i);
+		}
+		if (keys->pressed[i])
+			__set_bit(keys->pressed[i], down);
+	}
+	/* Retain held key identities across mode changes and merge duplicate keys. */
+	input_report_key(input, KEY_LEFTSHIFT, test_bit(KEY_LEFTSHIFT, down));
+	input_report_key(input, KEY_LEFTCTRL, test_bit(KEY_LEFTCTRL, down));
+	for_each_set_bit(i, input->keybit, KEY_CNT)
+		input_report_key(input, i, test_bit(i, down));
 	input_sync(input);
 }
 
@@ -90,8 +123,18 @@ static ssize_t raw_keys_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(raw_keys);
 
+static ssize_t key_mode_show(struct device *dev, struct device_attribute *attr,
+			     char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%s\n", READ_ONCE(keys->symbols) ? "symbols" : "letters");
+}
+static DEVICE_ATTR_RO(key_mode);
+
 static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_raw_keys.attr,
+	&dev_attr_key_mode.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(pwh1_keys);
@@ -128,6 +171,9 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	input_set_drvdata(input, keys);
 	for (i = 0; i < ARRAY_SIZE(alphabet); i++)
 		input_set_capability(input, EV_KEY, alphabet[i]);
+	for (i = 0; i < ARRAY_SIZE(symbols); i++)
+		if (symbols[i])
+			input_set_capability(input, EV_KEY, symbols[i]);
 	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
 		input_set_capability(input, EV_KEY, special_keys[i].key);
 	/* shortcut: no autorepeat until firmware key-release timing is verified. */
