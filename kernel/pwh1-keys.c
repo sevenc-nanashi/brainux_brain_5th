@@ -9,6 +9,7 @@
 struct pwh1_keys {
 	void __iomem *state;
 	u32 sample;
+	u8 stable;
 };
 
 /* A=01 and Q=11 observed; the intervening alphabet is inferred. */
@@ -36,7 +37,6 @@ static const struct {
 	{ 0x1b, KEY_MINUS },
 };
 
-
 static bool pwh1_key_down(u32 keys, u8 code)
 {
 	return (keys & 0xff) == code || ((keys >> 8) & 0xff) == code ||
@@ -46,15 +46,28 @@ static bool pwh1_key_down(u32 keys, u8 code)
 static void pwh1_keys_poll(struct input_dev *input)
 {
 	struct pwh1_keys *keys = input_get_drvdata(input);
+	u8 state = readb(keys->state);
 	u32 sample = readl(keys->state + 8) & 0xffffff;
 	unsigned int i;
+	u8 required = sample ? 2 : 4;
 
-	/* M4 writes three bytes separately: require two equal polling samples. */
-	if (sample != keys->sample) {
-		keys->sample = sample;
+	/* State 2 is transitional; state 1 must have cleared the key bytes. */
+	if ((state != 1 && state != 3) || readb(keys->state) != state ||
+	    (state == 1 && sample)) {
+		keys->stable = 0;
 		return;
 	}
 
+	/* Debounce presses for 20 ms and all-key releases for 60 ms. */
+	if (!keys->stable || sample != keys->sample) {
+		keys->sample = sample;
+		keys->stable = 1;
+		return;
+	}
+	if (keys->stable < required)
+		keys->stable++;
+	if (keys->stable < required)
+		return;
 	/* Deliver modifiers before characters when both arrive in one scan. */
 	for (i = 0; i < ARRAY_SIZE(special_keys); i++)
 		input_report_key(input, special_keys[i].key,
