@@ -37,6 +37,14 @@
             format = "r5g6b5";
         };
     };
+    reboot {
+        compatible = "syscon-reboot";
+        regmap = <&sim>;
+        // U-Boot mx7ulp reset_cpu(): SIM_SOPT1_A7_SW_RESET.
+        offset = <0>;
+        mask = <1>;
+        value = <1>;
+    };
     keyboard@1fff8080 {
         compatible = "sharp,pwh1-v690-key-state";
         reg = <0x1fff8080 0x14>, <0x1ffd76b4 8>;
