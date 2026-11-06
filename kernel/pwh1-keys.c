@@ -9,6 +9,9 @@
 /* shortcut: V690_H1 RAM layout; use a firmware protocol once it is understood. */
 struct pwh1_keys {
 	void __iomem *state;
+	void __iomem *queue;
+	void __iomem *gate;
+	u32 discarded;
 	u32 sample;
 	u8 stable;
 	bool symbols;
@@ -56,6 +59,45 @@ static bool pwh1_key_down(u32 keys, u8 code)
 	       ((keys >> 16) & 0xff) == code;
 }
 
+/* V690_H1 message buffer 1: M4 notifications to the retired A7 firmware. */
+static void pwh1_discard_notifications(struct pwh1_keys *keys)
+{
+	void __iomem *q = keys->queue;
+	u32 count, head, tail, free;
+
+	/* SEMA4 gate 5; firmware core IDs are M4=1 and A7=2. Never wait. */
+	if (readb(keys->gate) & 0xf)
+		return;
+	writeb(2, keys->gate);
+	if ((readb(keys->gate) & 0xf) != 2)
+		return;
+	mb();
+	count = readl(q + 0x10);
+	head = readl(q + 0x14);
+	tail = readl(q + 0x18);
+	free = readl(q + 0x1c);
+	/* shortcut: blocked RTOS senders need a wake handshake, not just free space. */
+	if (WARN_ON_ONCE(readl(q) != 1 || readl(q + 4) != 1024 ||
+			 readl(q + 8) != 8 || readl(q + 12) != 0x2f016000 ||
+			 readl(q + 0x20) != 5 ||
+			 readl(q + 0x24) != 0x200070ec ||
+			 head >= 1024 || tail >= 1024 ||
+			 free > 1024 || ((head | tail | free) & 3) ||
+			 count > (1024 - free) / 8 ||
+			 ((head - tail) & 1023) != ((1024 - free) & 1023)))
+		goto unlock;
+	if (count) {
+		/* Only drain when the producer wait list is empty. */
+		writel(head, q + 0x18);
+		writel(0, q + 0x10);
+		writel(1024, q + 0x1c);
+		WRITE_ONCE(keys->discarded, keys->discarded + count);
+	}
+unlock:
+	mb();
+	writeb(0, keys->gate);
+}
+
 static void pwh1_keys_poll(struct input_dev *input)
 {
 	struct pwh1_keys *keys = input_get_drvdata(input);
@@ -65,6 +107,8 @@ static void pwh1_keys_poll(struct input_dev *input)
 	u8 required = sample ? 2 : 4;
 	bool mode_down;
 	DECLARE_BITMAP(down, KEY_CNT);
+
+	pwh1_discard_notifications(keys);
 
 	/* State 2 is transitional; state 1 must have cleared the key bytes. */
 	if ((state != 1 && state != 3) || readb(keys->state) != state ||
@@ -132,9 +176,19 @@ static ssize_t key_mode_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(key_mode);
 
+static ssize_t discarded_notifications_show(struct device *dev,
+					   struct device_attribute *attr, char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u\n", READ_ONCE(keys->discarded));
+}
+static DEVICE_ATTR_RO(discarded_notifications);
+
 static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_raw_keys.attr,
 	&dev_attr_key_mode.attr,
+	&dev_attr_discarded_notifications.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(pwh1_keys);
@@ -161,6 +215,18 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	if (!keys)
 		return -ENOMEM;
 	keys->state = state;
+	keys->queue = devm_platform_ioremap_resource(pdev, 2);
+	if (IS_ERR(keys->queue))
+		return PTR_ERR(keys->queue);
+	keys->gate = devm_platform_ioremap_resource(pdev, 3);
+	if (IS_ERR(keys->gate))
+		return PTR_ERR(keys->gate);
+	code = devm_platform_ioremap_resource(pdev, 4);
+	if (IS_ERR(code))
+		return PTR_ERR(code);
+	if (readw(code) != 0xe92d || readw(code + 2) != 0x43fe ||
+	    readw(code + 4) != 0x4680 || readw(code + 6) != 0x000d)
+		return dev_err_probe(&pdev->dev, -ENODEV, "M4 message firmware mismatch\n");
 	platform_set_drvdata(pdev, keys);
 
 	input = devm_input_allocate_device(&pdev->dev);
