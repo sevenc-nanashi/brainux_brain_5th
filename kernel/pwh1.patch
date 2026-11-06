@@ -1,3 +1,35 @@
+diff --git a/arch/arm/kernel/reboot.c b/arch/arm/kernel/reboot.c
+index 3f0d5c3da..f7185b1d9 100644
+--- a/arch/arm/kernel/reboot.c
++++ b/arch/arm/kernel/reboot.c
+@@ -6,6 +6,7 @@
+ #include <linux/cpu.h>
+ #include <linux/delay.h>
+ #include <linux/reboot.h>
++#include <linux/of.h>
+ 
+ #include <asm/cacheflush.h>
+ #include <asm/idmap.h>
+@@ -133,9 +134,19 @@ void machine_power_off(void)
+  */
+ void machine_restart(char *cmd)
+ {
++	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
++
++	if (pwh1) {
++		pr_emerg("PWH1: machine restart\n");
++		mdelay(2000);
++	}
+ 	local_irq_disable();
+ 	smp_send_stop();
+ 
++	if (pwh1) {
++		pr_emerg("PWH1: IRQ off, calling reset\n");
++		mdelay(2000);
++	}
+ 	do_kernel_restart(cmd);
+ 
+ 	/* Give a grace period for failure to restart of 1s */
 diff --git a/arch/arm/mach-imx/common.c b/arch/arm/mach-imx/common.c
 index 5368497ac..1936e1106 100644
 --- a/arch/arm/mach-imx/common.c

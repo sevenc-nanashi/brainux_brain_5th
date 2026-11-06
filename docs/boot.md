@@ -268,3 +268,9 @@ diag 23はsyscore_shutdownのロック前・各終了関数名・完了を表示
 リセット操作の直前には `PWH1: RESET IN 3 SECONDS` を表示して3秒待ち、
 LCDが実際にその行を表示する時間を確保する。これが見えた後にノイズへ移るかを確認する。
 再起動方式は変更せず、終了処理のどこまで進んだかを調べる診断を継続する。
+
+diag 23の実機では `reboot: Restarting system` まで表示された後、ノイズ／白画面になった。
+syscore終了までは通過しているが、リセット要求への到達は未確認。
+diag 24は起動時に `Reset driver: bound` / `MISSING` を表示し、再起動時には
+`PWH1: machine restart`、`PWH1: IRQ off, calling reset` の各表示後に2秒待つ。
+その後の `PWH1: RESET IN 3 SECONDS` と合わせ、最後に読めた表示を確認する。
