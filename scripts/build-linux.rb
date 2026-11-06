@@ -46,7 +46,8 @@ run(*base, "CONFIG_PREFIX=#{fs}", 'install', out: File::NULL)
 FileUtils.cp(File.join(root, 'initramfs/init'), File.join(fs, 'init'))
 FileUtils.cp(File.join(root, 'initramfs/boot-root'), File.join(fs, 'sbin/boot-root'))
 FileUtils.cp(File.join(root, 'initramfs/usb-report'), File.join(fs, 'sbin/usb-report'))
-FileUtils.chmod(0755, [File.join(fs, 'init'), File.join(fs, 'sbin/boot-root')])
+FileUtils.cp(File.join(root, 'initramfs/keycodes'), File.join(fs, 'sbin/keycodes'))
+FileUtils.chmod(0755, [File.join(fs, 'init'), File.join(fs, 'sbin/boot-root'), File.join(fs, 'sbin/keycodes')])
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')
 entries = Dir.glob('**/*', base: fs).sort.map do |path|
