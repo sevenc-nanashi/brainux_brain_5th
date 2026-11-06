@@ -22,6 +22,20 @@ unsafe fn wait(address: usize, mask: u32, expected: u32) {
     }
 }
 
+// V690_H1 shared event group 3, used by both A7 and M4 power transitions.
+const POWER_FLAGS: usize = 0x2000_7c64;
+const POWER_MASK_API: usize = 0x8401_0080;
+
+unsafe fn inhibit_firmware_suspend() {
+    let power_mask: unsafe extern "C" fn(u32, u32) -> u32 =
+        unsafe { core::mem::transmute(POWER_MASK_API) };
+    unsafe {
+        // Firmware API takes the shared RTOS lock; raw writes would race M4.
+        power_mask(0x0f, 0);
+        assert_eq!(read(POWER_FLAGS + 4) & 0x1f, 0x10, "Power mask failed");
+    }
+}
+
 const FRAMEBUFFER: usize = brainux_probe::bundle::FRAMEBUFFER as usize;
 const FIRMWARE_FRAMEBUFFER: usize = 0x60a0_0008;
 const PEG_FRAMEBUFFER: usize = 0x60ac_a810;
@@ -116,6 +130,14 @@ pub unsafe fn progress(message: &str) {
 /// Refuse unsupported bus masters before changing any hardware.
 pub unsafe fn check() -> Result<(), &'static str> {
     unsafe {
+        let cpu = brainux_probe::cpu::Cpu::read();
+        if cpu.translate(POWER_FLAGS as u32) != Ok(POWER_FLAGS as u32)
+            || read(POWER_MASK_API) != 0xea03_5844
+            || read(POWER_FLAGS) != 3
+            || read(POWER_FLAGS + 4) & 0x10 == 0
+        {
+            return Err("Unsupported firmware power mask");
+        }
         let ctrl = read(0x40aa_0000);
         if ctrl & ((1 << 19) | (1 << 17) | (3 << 8) | (1 << 5) | 1)
             != (1 << 19) | (1 << 17) | (1 << 5) | 1
@@ -138,10 +160,11 @@ pub unsafe fn check() -> Result<(), &'static str> {
     Ok(())
 }
 
-/// No firmware calls or return to PEG are allowed after this point.
+/// Inhibit firmware suspend before disabling interrupts; never return to PEG.
 /// Storage files must already be closed, payloads validated, and audio stopped.
 pub unsafe fn stop() {
     unsafe {
+        inhibit_firmware_suspend();
         asm!("cpsid if", options(nostack, preserves_flags));
         check().expect("Bus master changed before handoff");
         progress("Boot: preparing display");
