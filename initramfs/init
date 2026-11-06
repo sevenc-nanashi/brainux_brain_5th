@@ -8,11 +8,11 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 14)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 15)\n'
 if [ -e /proc/device-tree/chosen/brainux,display-only ]; then
     echo 'Display check: USB disabled, CPU idle polling.'
 else
-# The USB console gives input before the native keyboard is ported.
+# USB provides an additional serial console when enabled.
 echo 'USB: configuring serial console'
 # A separate shell keeps errexit effective when the caller handles failure.
 /bin/sh -e > /run/usb-setup.log 2>&1 <<'USB_SETUP'
@@ -41,7 +41,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 14)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 15)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
@@ -53,21 +53,8 @@ else
     echo 'USB bound, but /dev/ttyGS0 is missing'
 fi
 fi
-# Read-only key calibration; no M4 firmware, GPIO or mailbox writes.
-keys=/sys/bus/platform/devices/1fff8080.keyboard/raw_keys
-if [ -r "$keys" ]; then
-    echo 'Keyboard calibration: press keys one at a time.'
-    echo 'Record A, Q, Enter, Shift; release each key.'
-    while :; do
-        printf '\rKeys: '
-        cat "$keys" || break
-        sleep 0.2
-        printf 'switch_to_root() {33[1A'
-    done
-else
-    echo 'Keyboard state unavailable:'
-    dmesg | sed -n '/pwh1-keys/p'
-fi
+echo 'Keyboard: A-Z, Enter, Shift (at most two keys).'
+
 switch_to_root() {
     trap '' USR1
     kill -TERM -1

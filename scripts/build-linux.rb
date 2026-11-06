@@ -72,7 +72,7 @@ run({'ARCH'=>'arm', 'CROSS_COMPILE'=>cross}, File.join(linux, 'scripts/kconfig/m
     File.join(output, '.config'), fragment, chdir: linux, out: File::NULL)
 run(*base, 'olddefconfig', out: File::NULL)
 resolved = File.read(File.join(output, '.config'))
-%w[MMU CPU_V7 SOC_IMX7ULP GENERIC_IDLE_POLL_SETUP ARM_PSCI ARM_PATCH_PHYS_VIRT DEVTMPFS BLK_DEV_INITRD FB_SIMPLE MFD_SYSCON DEBUG_FS USB_MXS_PHY USB_CHIPIDEA_IMX USB_CONFIGFS_ACM USB_CHIPIDEA_UDC MMC_SDHCI_ESDHC_IMX EXT4_FS].each do |name|
+%w[MMU CPU_V7 SOC_IMX7ULP GENERIC_IDLE_POLL_SETUP INPUT INPUT_KEYBOARD VT VT_CONSOLE ARM_PSCI ARM_PATCH_PHYS_VIRT DEVTMPFS BLK_DEV_INITRD FB_SIMPLE MFD_SYSCON DEBUG_FS USB_MXS_PHY USB_CHIPIDEA_IMX USB_CONFIGFS_ACM USB_CHIPIDEA_UDC MMC_SDHCI_ESDHC_IMX EXT4_FS].each do |name|
   raise "Required kernel option missing: CONFIG_#{name}=y" unless resolved.lines.any? { |line| line.chomp == "CONFIG_#{name}=y" }
 end
 run(*base, "-j#{jobs}", 'Image', 'imx7ulp-pwh1-brainux.dtb')
