@@ -78,6 +78,43 @@ index af90bfb0c..7696ea942 100644
  
  		if (dev->class && dev->class->shutdown_pre) {
  			if (initcall_debug)
+diff --git a/drivers/base/syscore.c b/drivers/base/syscore.c
+index 13db1f78d..b7f1fc2e1 100644
+--- a/drivers/base/syscore.c
++++ b/drivers/base/syscore.c
+@@ -6,6 +6,7 @@
+  */
+ 
+ #include <linux/syscore_ops.h>
++#include <linux/of.h>
+ #include <linux/mutex.h>
+ #include <linux/module.h>
+ #include <linux/suspend.h>
+@@ -114,15 +115,24 @@ EXPORT_SYMBOL_GPL(syscore_resume);
+ void syscore_shutdown(void)
+ {
+ 	struct syscore_ops *ops;
++	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
+ 
++	if (pwh1)
++		pr_emerg("PWH1: core lock\n");
+ 	mutex_lock(&syscore_ops_lock);
+ 
+ 	list_for_each_entry_reverse(ops, &syscore_ops_list, node)
+ 		if (ops->shutdown) {
+ 			if (initcall_debug)
+ 				pr_info("PM: Calling %pS\n", ops->shutdown);
++			if (pwh1)
++				pr_emerg("PWH1: core %ps\n", ops->shutdown);
+ 			ops->shutdown();
++			if (pwh1)
++				pr_emerg("PWH1: core done\n");
+ 		}
+ 
+ 	mutex_unlock(&syscore_ops_lock);
++	if (pwh1)
++		pr_emerg("PWH1: core finished\n");
+ }
 diff --git a/drivers/clk/imx/clk-composite-7ulp.c b/drivers/clk/imx/clk-composite-7ulp.c
 index 71e0b939f..2f3f35a2b 100644
 --- a/drivers/clk/imx/clk-composite-7ulp.c
@@ -119,10 +156,10 @@ index b75d44614..65405caf8 100644
 +
 +obj-$(CONFIG_INPUT_KEYBOARD) += pwh1-keys.o
 diff --git a/drivers/power/reset/syscon-reboot.c b/drivers/power/reset/syscon-reboot.c
-index 510e36338..d7eb5b6f7 100644
+index 510e36338..0d548cf40 100644
 --- a/drivers/power/reset/syscon-reboot.c
 +++ b/drivers/power/reset/syscon-reboot.c
-@@ -30,8 +30,14 @@ static int syscon_restart_handle(struct notifier_block *this,
+@@ -30,8 +30,17 @@ static int syscon_restart_handle(struct notifier_block *this,
  			container_of(this, struct syscon_reboot_context,
  					restart_handler);
  
@@ -131,8 +168,11 @@ index 510e36338..d7eb5b6f7 100644
 +	bool pwh1 = of_machine_is_compatible("sharp,pw-h1-brainux");
 +	int ret;
 +
-+	if (pwh1)
-+		pr_emerg("PWH1: write reset bit\n");
++	if (pwh1) {
++		pr_emerg("PWH1: RESET IN 3 SECONDS\n");
++		/* Leave a readable frame before resetting the firmware display path. */
++		mdelay(3000);
++	}
 +	ret = regmap_update_bits(ctx->map, ctx->offset, ctx->mask, ctx->value);
 +	if (pwh1)
 +		pr_emerg("PWH1: reset write returned %d\n", ret);
