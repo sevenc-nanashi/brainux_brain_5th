@@ -274,3 +274,8 @@ syscore終了までは通過しているが、リセット要求への到達は�
 diag 24は起動時に `Reset driver: bound` / `MISSING` を表示し、再起動時には
 `PWH1: machine restart`、`PWH1: IRQ off, calling reset` の各表示後に2秒待つ。
 その後の `PWH1: RESET IN 3 SECONDS` と合わせ、最後に読めた表示を確認する。
+
+diag 24では `Reset driver: bound` と `PWH1: RESET IN 3 SECONDS` を実機で確認。
+その後はノイズ／白画面となったが、キーを連打するとリセットされたとの報告あり。
+押したキー、純正OSのホーム画面への到達、キー入力なしでの再現性はまだ未確認。
+この時点ではリセット方式を変更せず、キー入力による復帰と単なる経過時間を切り分ける。
