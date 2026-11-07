@@ -22,10 +22,18 @@ index 5368497ac..1936e1106 100644
  void imx7d_ddr3_freq_change(u32 freq) {}
  #endif
 diff --git a/arch/arm/mach-imx/mach-imx7ulp.c b/arch/arm/mach-imx/mach-imx7ulp.c
-index 6ab1a0176..955190a79 100644
+index 6ab1a0176..3a9800de0 100644
 --- a/arch/arm/mach-imx/mach-imx7ulp.c
 +++ b/arch/arm/mach-imx/mach-imx7ulp.c
-@@ -67,7 +67,8 @@ static void __init imx7ulp_set_revision(void)
+@@ -5,6 +5,7 @@
+  *   Author: Dong Aisheng <aisheng.dong@nxp.com>
+  */
+ 
++#include <linux/cpu.h>
+ #include <linux/irqchip.h>
+ #include <linux/mfd/syscon.h>
+ #include <linux/of_platform.h>
+@@ -67,13 +68,21 @@ static void __init imx7ulp_set_revision(void)
  
  static void __init imx7ulp_init_machine(void)
  {
@@ -35,7 +43,20 @@ index 6ab1a0176..955190a79 100644
  
  	mxc_set_cpu_type(MXC_CPU_IMX7ULP);
  	imx7ulp_set_revision();
-@@ -87,6 +88,9 @@ static void __init imx7ulp_map_io(void)
+ 	of_platform_default_populate(NULL, NULL, NULL);
+ }
+ 
++static void __init imx7ulp_init_early(void)
++{
++	/* Warm boot inherits firmware wake masks; the PW-H1 driver arms TPM. */
++	if (of_machine_is_compatible("sharp,pw-h1-brainux"))
++		cpu_idle_poll_ctrl(true);
++}
++
+ static const char *const imx7ulp_dt_compat[] __initconst = {
+ 	"fsl,imx7ulp",
+ 	NULL,
+@@ -87,6 +96,9 @@ static void __init imx7ulp_map_io(void)
  
  static void __init imx7ulp_init_late(void)
  {
@@ -45,6 +66,14 @@ index 6ab1a0176..955190a79 100644
  	if (IS_ENABLED(CONFIG_ARM_IMX_CPUFREQ_DT))
  		platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
  
+@@ -96,6 +108,7 @@ static void __init imx7ulp_init_late(void)
+ 
+ DT_MACHINE_START(IMX7ulp, "Freescale i.MX7ULP (Device Tree)")
+ 	.map_io		= imx7ulp_map_io,
++	.init_early	= imx7ulp_init_early,
+ 	.init_machine	= imx7ulp_init_machine,
+ 	.dt_compat	= imx7ulp_dt_compat,
+ 	.init_late	= imx7ulp_init_late,
 diff --git a/drivers/clk/imx/clk-composite-7ulp.c b/drivers/clk/imx/clk-composite-7ulp.c
 index 71e0b939f..2f3f35a2b 100644
 --- a/drivers/clk/imx/clk-composite-7ulp.c

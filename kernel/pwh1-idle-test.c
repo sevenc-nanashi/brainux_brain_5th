@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/delay.h>
+#include <linux/cpu.h>
 #include <linux/io.h>
 #include <linux/irqchip/arm-gic.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/regmap.h>
 #include <asm/proc-fns.h>
 
-/* Explicit diagnostic only; normal idle remains polling. */
+/* Serialize the explicit WFI diagnostic. */
 static DEFINE_MUTEX(test_lock);
 
 struct pwh1_idle_test {
@@ -152,7 +155,10 @@ static int pwh1_idle_test_probe(struct platform_device *pdev)
 {
 	struct pwh1_idle_test *test;
 	struct resource *res;
-	u32 width;
+	struct regmap *sim;
+	u32 width, wake_before, wake_after, pmctrl;
+	u32 mask = GENMASK(17, 16) | GENMASK(2, 0);
+	int ret;
 	unsigned int i;
 	void __iomem **shared[3];
 
@@ -182,6 +188,31 @@ static int pwh1_idle_test_probe(struct platform_device *pdev)
 		return -ENODEV;
 	test->counter_mask = GENMASK(width - 1, 0);
 	platform_set_drvdata(pdev, test);
+	sim = syscon_regmap_lookup_by_compatible("fsl,imx7ulp-sim");
+	if (IS_ERR(sim))
+		return PTR_ERR(sim);
+	ret = regmap_read(sim, 0x88, &wake_before);
+	if (ret)
+		return ret;
+	/* IMX7ULPRM table 33-3: TPM4-7/LPIT1 wake through WKPU channel 3. */
+	ret = regmap_update_bits(sim, 0x88, BIT(3), BIT(3));
+	if (ret)
+		return ret;
+	ret = regmap_read(sim, 0x88, &wake_after);
+	if (ret)
+		return ret;
+	if (!(wake_after & BIT(3)))
+		return dev_err_probe(&pdev->dev, -EIO, "TPM wakeup enable failed\n");
+	/* PSTOP3 keeps the system/bus clocks and the firmware display running. */
+	pmctrl = readl(test->smc + 0x10);
+	writel((pmctrl & ~mask) | (3 << 16), test->smc + 0x10);
+	pmctrl = readl(test->smc + 0x10);
+	if ((pmctrl & mask) != (3 << 16))
+		return dev_err_probe(&pdev->dev, -EIO, "PSTOP3 setup failed\n");
+	pr_info("PW-H1: idle PSTOP3, WKPU=%08x->%08x PMCTRL=%08x\n",
+		wake_before, wake_after, pmctrl);
+	/* Release the boot-time polling hold only after the wake path is ready. */
+	cpu_idle_poll_ctrl(false);
 	return 0;
 }
 
@@ -196,6 +227,7 @@ static struct platform_driver pwh1_idle_test_driver = {
 		.name = "pwh1-idle-test",
 		.of_match_table = pwh1_idle_test_ids,
 		.dev_groups = pwh1_idle_test_groups,
+		.suppress_bind_attrs = true,
 	},
 };
 module_platform_driver(pwh1_idle_test_driver);

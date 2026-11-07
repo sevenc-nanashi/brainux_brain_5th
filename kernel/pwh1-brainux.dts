@@ -23,8 +23,7 @@
     chosen {
         // shortcut: isolate display until USB PHY reset no longer corrupts it.
         brainux,display-only;
-        // shortcut: use polling until TPM wakeup is confirmed by wfi-test.
-        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1 nohlt";
+        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1";
         #address-cells = <1>;
         #size-cells = <1>;
         ranges;

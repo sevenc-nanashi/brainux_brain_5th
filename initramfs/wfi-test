@@ -25,7 +25,7 @@ while [ "$i" -lt 10 ]; do
     sleep 1
     i=$((i + 1))
 done
-echo 'DONE: normal idle is still polling.'
+echo 'DONE: normal idle uses PSTOP3.'
 
 echo 'TPM / GIC report (PRE and POST):'
 dmesg | sed -n '/WFI TEST:/p' | tail -n 16
