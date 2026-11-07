@@ -28,6 +28,7 @@ FileUtils.cp(File.join(root, 'kernel/pwh1-brainux.dts'), File.join(linux, 'arch/
 FileUtils.cp(File.join(root, 'kernel/pwh1-refresh.c'), File.join(linux, 'drivers/video/fbdev/pwh1-refresh.c'))
 FileUtils.cp(File.join(root, 'kernel/pwh1-keys.c'), File.join(linux, 'drivers/input/keyboard/pwh1-keys.c'))
 FileUtils.cp(File.join(root, 'kernel/pwh1-reset.c'), File.join(linux, 'drivers/power/reset/pwh1-reset.c'))
+FileUtils.cp(File.join(root, 'kernel/pwh1-idle-test.c'), File.join(linux, 'arch/arm/mach-imx/pwh1-idle-test.c'))
 bb_out = File.join(root, 'target/busybox-build')
 FileUtils.mkdir_p(bb_out)
 base = ['make', '-C', busybox, "O=#{bb_out}", "CROSS_COMPILE=#{cross}"]
@@ -57,6 +58,7 @@ FileUtils.cp(File.join(root, 'initramfs/boot-root'), File.join(fs, 'sbin/boot-ro
 FileUtils.cp(File.join(root, 'initramfs/usb-report'), File.join(fs, 'sbin/usb-report'))
 FileUtils.cp(File.join(root, 'initramfs/keycodes'), File.join(fs, 'sbin/keycodes'))
 FileUtils.cp(File.join(root, 'initramfs/keymap'), File.join(fs, 'sbin/keymap'))
+FileUtils.install(File.join(root, 'initramfs/wfi-test'), File.join(fs, 'sbin/wfi-test'), mode: 0755)
 FileUtils.chmod(0755, [File.join(fs, 'init'), File.join(fs, 'sbin/boot-root'), File.join(fs, 'sbin/keycodes'), File.join(fs, 'sbin/keymap')])
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')

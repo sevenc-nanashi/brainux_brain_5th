@@ -1,3 +1,13 @@
+diff --git a/arch/arm/mach-imx/Makefile b/arch/arm/mach-imx/Makefile
+index efba019af..b9989ddbf 100644
+--- a/arch/arm/mach-imx/Makefile
++++ b/arch/arm/mach-imx/Makefile
+@@ -101,3 +101,5 @@ ifneq ($(CONFIG_HAVE_IMX_BUSFREQ),)
+ obj-$(CONFIG_OPTEE) += busfreq_optee.o smp_wfe_optee.o
+ AFLAGS_smp_wfe_optee.o :=-Wa,-march=armv7-a
+ endif
++
++obj-$(CONFIG_SOC_IMX7ULP) += pwh1-idle-test.o
 diff --git a/arch/arm/mach-imx/common.c b/arch/arm/mach-imx/common.c
 index 5368497ac..1936e1106 100644
 --- a/arch/arm/mach-imx/common.c

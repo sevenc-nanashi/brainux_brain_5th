@@ -41,6 +41,10 @@
         compatible = "sharp,pwh1-v690-reset";
         reg = <0x4103d058 4>, <0x4100f008 4>, <0x1ffd6352 20>;
     };
+    idle-test@40410000 {
+        compatible = "sharp,pwh1-idle-test";
+        reg = <0x40410000 0x40>;
+    };
     keyboard@1fff8080 {
         compatible = "sharp,pwh1-v690-key-state";
         reg = <0x1fff8080 0x14>, <0x1ffd76b4 8>,
