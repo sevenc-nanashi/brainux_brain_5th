@@ -9,11 +9,31 @@ case "$1" in /dev/mmcblk0p[0-9]*) ;; *) echo 'Only the SD card is supported' >&2
     echo 'An SD ext4 partition containing a Brainux rootfs is required.' >&2
     exit 1
 }
-mount -t ext4 -o ro "$1" /newroot
-if ! chroot /newroot /bin/sh -c 'test -x /sbin/init'; then
-    umount /newroot
-    echo 'No /sbin/init in rootfs' >&2
+if mountpoint -q /newroot; then
+    echo '/newroot is already mounted; unmount it before retrying' >&2
     exit 1
 fi
+mount -t ext4 -o ro "$1" /newroot
+trap 'umount /newroot' EXIT
+if ! chroot /newroot /bin/sh -c 'test -x /sbin/init'; then
+    echo 'Cannot run rootfs /bin/sh, or /sbin/init is missing' >&2
+    exit 1
+fi
+missing=0
+for dir in dev proc sys run; do
+    path=/newroot/$dir
+    if [ -L "$path" ] || { [ -e "$path" ] && [ ! -d "$path" ]; }; then
+        echo "Not a real mount directory: $path" >&2
+        exit 1
+    fi
+    [ -d "$path" ] || missing=1
+done
+if [ "$missing" -eq 1 ]; then
+    # The distributed image omits /proc and /sys; create the mount targets first.
+    mount -o remount,rw /newroot
+    mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run
+    mount -o remount,ro /newroot
+fi
 # PID 1 performs switch_root; a shell command cannot replace init on its own.
-kill -USR1 1
+trap - EXIT
+kill -USR1 1 || { umount /newroot; exit 1; }

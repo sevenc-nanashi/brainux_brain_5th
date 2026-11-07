@@ -8,7 +8,7 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 51, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 52, @BUILD_REVISION@)\n'
 if [ -e /proc/device-tree/chosen/brainux,display-only ]; then
     echo 'Display check: USB disabled.'
 else
@@ -41,7 +41,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 51, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 52, @BUILD_REVISION@)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
@@ -61,14 +61,32 @@ echo 'Keyboard: aaA1 toggles letters / symbols.'
 echo 'Type keymap for layout; keycodes for raw codes.'
 
 switch_to_root() {
+    for dir in proc sys run dev; do
+        if [ ! -d "/newroot/$dir" ] || [ -L "/newroot/$dir" ]; then
+            echo "Root switch refused: /newroot/$dir is not a mount directory"
+            return
+        fi
+    done
     trap '' USR1
     kill -TERM -1
     sleep 1
     kill -KILL -1
-    mount --move /dev /newroot/dev || return
-    mount --move /proc /newroot/proc || return
-    mount --move /sys /newroot/sys || return
-    mount --move /run /newroot/run || return
+    moved=
+    for dir in proc sys run dev; do
+        if ! mount --move "/$dir" "/newroot/$dir"; then
+            echo "Root switch failed at /$dir; restoring initramfs mounts"
+            for previous in $moved; do
+                if ! mount --move "/newroot/$previous" "/$previous"; then
+                    echo "Cannot restore /$previous; reset required"
+                    while :; do sleep 60; done
+                fi
+            done
+            umount /newroot
+            trap switch_to_root USR1
+            return
+        fi
+        moved="$dir $moved"
+    done
     exec switch_root /newroot /sbin/init
 }
 trap switch_to_root USR1
