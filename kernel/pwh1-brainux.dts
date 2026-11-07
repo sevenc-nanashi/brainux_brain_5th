@@ -23,8 +23,8 @@
     chosen {
         // shortcut: isolate display until USB PHY reset no longer corrupts it.
         brainux,display-only;
-        // PSTOP3 and TPM Doze configuration keep timer wakeups available.
-        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1";
+        // shortcut: use polling until TPM wakeup is confirmed by wfi-test.
+        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1 nohlt";
         #address-cells = <1>;
         #size-cells = <1>;
         ranges;

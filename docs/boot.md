@@ -495,3 +495,11 @@ https://github.com/nxp-mcuxpresso/mcux-sdk/blob/main/devices/MCIMX7U5/MCIMX7U5_c
 DOZEENの実機初期値と、この変更による復帰の改善は未確認。BOOT-diag35.BINを保存する。
 起動後の入力・表示、sleep 10の実時間、キー操作なしでwfi-testが完了するかを確認する。
 ARMカウンターが止まること自体はLinuxがTPMを使う場合の不具合とは限らない。
+
+### diag 37: 通常idleを再びポーリングへ戻す
+
+diag 36でもキー入力できないとの実機報告あり。TPMのDOZEEN解除だけで復帰するという
+仮説は実証できなかった。nohltを復元し、起動時のSMC1変更を撤去する。
+TPMのDOZEEN解除と実際のTPMを読む診断は維持し、起動時にCONF変更前後と
+current_clocksourceを表示する。手動のwfi-testだけがSMCを一時変更してWFIへ入る。
+まず入力が戻ることと表示されるTPM CONF / Clocksourceを確認する。

@@ -7,7 +7,7 @@
 #include <linux/platform_device.h>
 #include <asm/proc-fns.h>
 
-/* Explicit diagnostic in addition to normal shallow idle. */
+/* Explicit diagnostic only; normal idle remains polling. */
 static DEFINE_MUTEX(test_lock);
 
 struct pwh1_idle_test {

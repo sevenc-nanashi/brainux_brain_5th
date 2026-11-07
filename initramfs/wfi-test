@@ -25,7 +25,7 @@ while [ "$i" -lt 10 ]; do
     sleep 1
     i=$((i + 1))
 done
-echo 'DONE: normal idle uses shallow WFI.'
+echo 'DONE: normal idle is still polling.'
 
 echo 'TPM comparison (cycles / TST-us):'
 dmesg | sed -n '/WFI TEST:/p' | tail -n 9
