@@ -545,3 +545,18 @@ IRQ禁止で20msだけCPUを動かしたまま待ち、AWAKEのTPM/GIC状態を�
 IRQを再開し、従来どおり100ms待ってからWFIを試す。保留tickを持ち込まない。
 AWAKEでもIRQ54がHPPIRに現れないなら、待機時のクロック停止だけでは説明できない。
 /proc/interruptsのTPMノード名も表示対象に追加。復帰問題の修正はまだ未確定。
+
+#### diag 39の実機結果
+
+AWAKEではCH=d0、ST=1、IRQ54 E=1/P=1/A=0/G=0、PRI=a0、TGT=0、
+GIC D=1/C=1/PMR=f0/HPPIR=36/RPR=ff。IRQ禁止中でもCPU動作中は
+TPMの比較イベントがCPUインターフェースの最優先割り込み（0x36=54）になる。
+PREはCH=50/ST=0/P=0/HPPIR=3ff、POSTはCH=d0/ST=1/P=1/HPPIR=36。
+SLEEPは13819903カウント/4624641µsで、前後と同じ約2.99 MHz。
+/proc/interruptsのTPM件数も1647→1750→1853と増えている。
+
+diag 38写真のHPPIRを3bと読んだ結果は誤読の可能性があるため、
+IRQ59を原因とする推論には使わない。今回の写真では36と読める。
+通常動作時のIRQ番号・GIC配送・Linuxでの処理は機能している。
+残る問題はWFIによる待機からの復帰であり、POSTだけでは待機中にも
+GIC出力が成立していたとは断定できない。通常idleは引き続きnohltを維持する。
