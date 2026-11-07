@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/bitmap.h>
+#include <linux/backlight.h>
 #include <linux/io.h>
 #include <linux/input.h>
 #include <linux/module.h>
@@ -16,6 +17,9 @@ struct pwh1_keys {
 	void __iomem *gpio;
 	void __iomem *rtos;
 	void __iomem *rpc_gate;
+	void __iomem *event_gate;
+	void __iomem *mu;
+	void __iomem *backlight_state;
 	u32 discarded;
 	u32 acknowledged;
 	bool symbols;
@@ -124,6 +128,67 @@ static void pwh1_ack_events(struct pwh1_keys *keys)
 	writel(1, rpc + 4);
 	WRITE_ONCE(keys->acknowledged, keys->acknowledged + 1);
 }
+
+static int pwh1_backlight_update(struct backlight_device *bd)
+{
+	struct pwh1_keys *keys = bl_get_data(bd);
+	void __iomem *q = keys->rtos + 0x6800;
+	void __iomem *entry;
+	u32 count, head;
+	int ret = 0;
+
+	/* V690_H1 1ffd475c: M4's asynchronous RPC queue, protected by gate 0. */
+	if (readb(keys->event_gate) & 0xf)
+		return -EBUSY;
+	writeb(2, keys->event_gate);
+	if ((readb(keys->event_gate) & 0xf) != 2)
+		return -EBUSY;
+	mb();
+	count = readl(q + 4);
+	head = readl(q + 8);
+	if (readl(keys->rtos + 0x6eb4) != 0x20006800 ||
+	    readl(keys->rtos + 0x6ea8) != 16 || readl(q) != 0 ||
+	    count > 16 || head >= 16) {
+		ret = -EIO;
+		goto unlock;
+	}
+	if (count == 16) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+	entry = q + 0x10 + head * 0x30;
+	writel(0xffffff19, entry); /* set event on another core */
+	writel(2 << 24, entry + 4); /* A7 sender, no original task ID */
+	writel(0, entry + 8);
+	writel(11, entry + 12); /* asynchronous event handler */
+	writel(0, entry + 16);
+	writel(1, entry + 20); /* destination M4 */
+	writel(8, entry + 24); /* backlight task's event group */
+	/* Keep the firmware's calibrated brightness; event 1=on, 2=off. */
+	writel(backlight_get_brightness(bd) ? 1 : 2, entry + 28);
+	writel((head + 1) % 16, q + 8);
+	writel(count + 1, q + 4);
+unlock:
+	mb();
+	writeb(0, keys->event_gate);
+	if (!ret) {
+		/* Match 1ffd4350/1ffd50c8: notify M4 using general interrupt 3. */
+		writel((readl(keys->mu) & ~GENMASK(19, 16)) | BIT(16), keys->mu);
+	}
+	return ret;
+}
+
+static int pwh1_backlight_get(struct backlight_device *bd)
+{
+	struct pwh1_keys *keys = bl_get_data(bd);
+
+	return readl(keys->backlight_state + 4) == 2;
+}
+
+static const struct backlight_ops pwh1_backlight_ops = {
+	.update_status = pwh1_backlight_update,
+	.get_brightness = pwh1_backlight_get,
+};
 
 static void pwh1_keys_poll(struct input_dev *input)
 {
@@ -357,6 +422,8 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	void __iomem *code, *state;
 	struct pwh1_keys *keys;
 	struct input_dev *input;
+	struct backlight_device *backlight;
+	struct backlight_properties props = { .type = BACKLIGHT_RAW, .max_brightness = 1 };
 	unsigned int i;
 	int ret;
 
@@ -420,6 +487,20 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 		return PTR_ERR(code);
 	if (readl(code) != 0x4ff8e92d || readl(code + 4) != 0x980b4604)
 		return dev_err_probe(&pdev->dev, -ENODEV, "M4 RPC firmware mismatch\n");
+	keys->event_gate = devm_platform_ioremap_resource(pdev, 11);
+	if (IS_ERR(keys->event_gate))
+		return PTR_ERR(keys->event_gate);
+	keys->mu = devm_platform_ioremap_resource(pdev, 12);
+	if (IS_ERR(keys->mu))
+		return PTR_ERR(keys->mu);
+	keys->backlight_state = devm_platform_ioremap_resource(pdev, 13);
+	if (IS_ERR(keys->backlight_state))
+		return PTR_ERR(keys->backlight_state);
+	props.brightness = readl(keys->backlight_state + 4) == 2;
+	backlight = devm_backlight_device_register(&pdev->dev, "pwh1", &pdev->dev,
+		keys, &pwh1_backlight_ops, &props);
+	if (IS_ERR(backlight))
+		return PTR_ERR(backlight);
 	platform_set_drvdata(pdev, keys);
 
 	input = devm_input_allocate_device(&pdev->dev);

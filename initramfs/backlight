@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+base=/sys/class/backlight/pwh1
+case "${1:-status}" in
+    on) echo 1 > "$base/brightness" ;;
+    off) echo 0 > "$base/brightness" ;;
+    test)
+        trap 'echo 1 > "$base/brightness"' EXIT
+        trap 'exit 1' INT TERM
+        echo 0 > "$base/brightness"
+        sleep 2
+        ;;
+    status)
+        printf 'Requested: '
+        cat "$base/brightness"
+        printf 'Firmware: '
+        cat "$base/actual_brightness"
+        ;;
+    *) echo 'Usage: backlight [on|off|test|status]' >&2; exit 2 ;;
+esac
