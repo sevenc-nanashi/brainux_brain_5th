@@ -461,3 +461,15 @@ ENTER表示後100ms待ってからIRQ禁止・SMC設定・カウンター読取�
 WFI前のIRQ禁止区間にはprintkもビジー待ちも入れない。ENTERは厳密な直前ではなく、
 コンソール反映待ちに入る前の印となる。SMC設定失敗はエラーでシェルに戻る。
 偶然保留IRQと重なって即復帰する可能性は残るため、SLEEP値も含め複数回で確認する。
+
+### diag 35: 32bit時刻システムコールの互換性
+
+`sleep 10` がWFI診断前の起動直後から即終了するとの実機報告あり。
+解決済み.configでCONFIG_COMPAT_32BIT_TIMEが無効だった。使用中の静的リンクBusyBoxの
+libcは32bitに収まる待ち時間をARM syscall 265（clock_nanosleep_time32）へ送る。
+BusyBox libbb/duration.cはnanosleepの戻り値を無視し、sleep_mainも成功を返すため、
+ENOSYSでもエラー表示が出ない。カーネルで互換APIを有効化し、ビルド時の必須検証へ追加する。
+
+AFTERの10回の表示が一気に出たことだけではWFI復帰時のタイマー異常を示さない。
+まず再起動直後のsleep 10が約10秒待つことを確認してから、wfi-testを再実行する。
+WFIでタイマー復帰せずキー操作を必要とする現象は、別途検証を継続する。
