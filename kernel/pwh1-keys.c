@@ -12,6 +12,8 @@ struct pwh1_keys {
 	void __iomem *queue;
 	void __iomem *gate;
 	void __iomem *portb;
+	void __iomem *iomux;
+	void __iomem *gpio;
 	u32 discarded;
 	bool symbols;
 	bool mode_down;
@@ -189,7 +191,8 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
                              const char *buf, size_t count)
 {
 	struct pwh1_keys *keys = dev_get_drvdata(dev);
-	unsigned int pin;
+	static const u16 rows[] = { 0x112, 0x111, 0x10a, 0x017, 0x000, 0x012, 0x009 };
+	unsigned int pin, i;
 
 	if (!sysfs_streq(buf, "1"))
 		return -EINVAL;
@@ -203,7 +206,15 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 	/* shortcut: manual recovery only until M4's lost rearm is understood. */
 	writel(0x010842c8, keys->portb + 0x88);
 	writel(0x01080009, keys->portb + 0x8c);
-	readl(keys->portb + 3 * 4);
+	/* Complete 1ffdd7d2 -> 1ffdd79c: drive rows low, then restore mux. */
+	for (i = 0; i < ARRAY_SIZE(rows); i++) {
+		unsigned int bank = rows[i] >> 8;
+		unsigned int bit = rows[i] & 0xff;
+
+		writel(BIT(bit), keys->gpio + bank * 0x40 + 8);
+		writel(0x00020120, keys->iomux + bank * 0x80 + bit * 4);
+	}
+	readl(keys->iomux);
 	dev_info(dev, "rearmed key column interrupts\n");
 	return count;
 }
@@ -256,6 +267,20 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	keys->portb = devm_platform_ioremap_resource(pdev, 5);
 	if (IS_ERR(keys->portb))
 		return PTR_ERR(keys->portb);
+	/* Shared with firmware and the reboot driver; do not claim whole banks. */
+	{
+		struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 6);
+
+		if (!res)
+			return -EINVAL;
+		keys->iomux = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 7);
+		if (!res)
+			return -EINVAL;
+		keys->gpio = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+		if (!keys->iomux || !keys->gpio)
+			return -ENOMEM;
+	}
 	platform_set_drvdata(pdev, keys);
 
 	input = devm_input_allocate_device(&pdev->dev);
