@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 require 'fileutils'
+require 'open3'
 root = File.expand_path('..', __dir__)
 linux = File.expand_path(ENV.fetch('LINUX', File.join(root, 'target/linux')))
 busybox = File.expand_path(ENV.fetch('BUSYBOX_SRC', File.join(root, 'target/busybox')))
@@ -44,7 +45,14 @@ fs = File.join(root, 'target/initramfs')
 FileUtils.mkdir_p(fs)
 run(*base, "CONFIG_PREFIX=#{fs}", 'install', out: File::NULL)
 %w[dev proc sys run newroot].each { |dir| FileUtils.mkdir_p(File.join(fs, dir)) }
-FileUtils.cp(File.join(root, 'initramfs/init'), File.join(fs, 'init'))
+sha, status = Open3.capture2('git', '-C', root, 'rev-parse', '--short=12', 'HEAD')
+raise 'Cannot read build commit' unless status.success?
+changes, status = Open3.capture2('git', '-C', root, 'status', '--porcelain', '--untracked-files=no')
+raise 'Cannot read worktree status' unless status.success?
+build_revision = sha.strip + (changes.empty? ? '' : '-dirty')
+init = File.read(File.join(root, 'initramfs/init'))
+raise 'Missing build revision placeholder' unless init.include?('@BUILD_REVISION@')
+File.write(File.join(fs, 'init'), init.gsub('@BUILD_REVISION@', build_revision))
 FileUtils.cp(File.join(root, 'initramfs/boot-root'), File.join(fs, 'sbin/boot-root'))
 FileUtils.cp(File.join(root, 'initramfs/usb-report'), File.join(fs, 'sbin/usb-report'))
 FileUtils.cp(File.join(root, 'initramfs/keycodes'), File.join(fs, 'sbin/keycodes'))
