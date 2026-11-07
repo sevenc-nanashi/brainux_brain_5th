@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+base=/sys/bus/platform/devices/1fff8080.keyboard
+before=$(cat "$base/m4_status")
+echo 'Close/open lid, then press A. Report in 15 seconds.'
+sleep 15
+echo BEFORE
+printf '%s\n' "$before"
+echo AFTER
+cat "$base/m4_status" "$base/firmware_status" "$base/gpio_status"

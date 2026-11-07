@@ -14,6 +14,7 @@ struct pwh1_keys {
 	void __iomem *portb;
 	void __iomem *iomux;
 	void __iomem *gpio;
+	void __iomem *rtos;
 	u32 discarded;
 	bool symbols;
 	bool mode_down;
@@ -204,6 +205,39 @@ static ssize_t gpio_status_show(struct device *dev, struct device_attribute *att
 }
 static DEVICE_ATTR_RO(gpio_status);
 
+static void __iomem *rtos_pointer(struct pwh1_keys *keys, u32 address, u32 size)
+{
+	if ((address & 3) || address < 0x20000000 ||
+	    address > 0x20010000 - size)
+		return NULL;
+	return keys->rtos + (address - 0x20000000);
+}
+
+static ssize_t m4_status_show(struct device *dev, struct device_attribute *attr,
+                              char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+	void __iomem *tasks, *mutexes, *task, *mutex;
+	u32 ta = readl(keys->rtos + 0x3f50);
+	u32 ma = readl(keys->rtos + 0x3f64);
+
+	/* V690_H1 task 7 is the key task; it acquires mutex 1 before scanning. */
+	tasks = rtos_pointer(keys, ta, 32);
+	mutexes = rtos_pointer(keys, ma, 8);
+	if (!tasks || !mutexes)
+		return sysfs_emit(buf, "M4 tables outside mapped RAM: %08x %08x\n", ta, ma);
+	ta = readl(tasks + 7 * 4);
+	ma = readl(mutexes + 4);
+	task = rtos_pointer(keys, ta, 0x74);
+	mutex = rtos_pointer(keys, ma, 0x14);
+	if (!task || !mutex)
+		return sysfs_emit(buf, "M4 objects outside mapped RAM: %08x %08x\n", ta, ma);
+	return sysfs_emit(buf, "task7=%08x id=%u handler=%08x arg=%08x\nmutex1=%08x owner=%u current=%08x\n",
+		ta, readw(task + 0x22), readl(task + 0x14), readl(task + 0x4c),
+		ma, readw(mutex + 0x10), readl(keys->rtos + 0x3f34));
+}
+static DEVICE_ATTR_RO(m4_status);
+
 /* V690_H1 1ffdd7d2: rearm the seven key columns, excluding PTB1. */
 static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
                              const char *buf, size_t count)
@@ -240,6 +274,7 @@ static DEVICE_ATTR_WO(recover);
 
 static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_raw_keys.attr,
+	&dev_attr_m4_status.attr,
 	&dev_attr_gpio_status.attr,
 	&dev_attr_recover.attr,
 	&dev_attr_firmware_status.attr,
@@ -298,6 +333,15 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 			return -EINVAL;
 		keys->gpio = devm_ioremap(&pdev->dev, res->start, resource_size(res));
 		if (!keys->iomux || !keys->gpio)
+			return -ENOMEM;
+	}
+	{
+		struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 8);
+
+		if (!res)
+			return -EINVAL;
+		keys->rtos = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+		if (!keys->rtos)
 			return -ENOMEM;
 	}
 	platform_set_drvdata(pdev, keys);
