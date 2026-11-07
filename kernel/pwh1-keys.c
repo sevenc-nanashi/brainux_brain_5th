@@ -169,8 +169,23 @@ static ssize_t discarded_notifications_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(discarded_notifications);
 
+static ssize_t firmware_status_show(struct device *dev,
+                                    struct device_attribute *attr, char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+
+	/* Read-only samples: M4 can change these fields between reads. */
+	return sysfs_emit(buf, "state=%u enable=%u special=%u gate=%x count=%u free=%u wait=%08x discarded=%u\n",
+		readb(keys->state), readb(keys->state + 1),
+		readb(keys->state + 5), readb(keys->gate),
+		readl(keys->queue + 0x10), readl(keys->queue + 0x1c),
+		readl(keys->queue + 0x24), READ_ONCE(keys->discarded));
+}
+static DEVICE_ATTR_RO(firmware_status);
+
 static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_raw_keys.attr,
+	&dev_attr_firmware_status.attr,
 	&dev_attr_key_mode.attr,
 	&dev_attr_discarded_notifications.attr,
 	NULL,

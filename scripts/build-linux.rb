@@ -60,6 +60,7 @@ FileUtils.cp(File.join(root, 'initramfs/keycodes'), File.join(fs, 'sbin/keycodes
 FileUtils.cp(File.join(root, 'initramfs/keymap'), File.join(fs, 'sbin/keymap'))
 FileUtils.install(File.join(root, 'initramfs/wfi-test'), File.join(fs, 'sbin/wfi-test'), mode: 0755)
 FileUtils.chmod(0755, [File.join(fs, 'init'), File.join(fs, 'sbin/boot-root'), File.join(fs, 'sbin/keycodes'), File.join(fs, 'sbin/keymap')])
+FileUtils.install(File.join(root, 'initramfs/keydiag'), File.join(fs, 'sbin/keydiag'), mode: 0755)
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')
 entries = Dir.glob('**/*', base: fs).sort.map do |path|

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+status=/sys/bus/platform/devices/1fff8080.keyboard/firmware_status
+[ -r "$status" ] || { echo 'Keyboard diagnostic unavailable' >&2; exit 1; }
+echo 'Press A, close/open the lid, then press A again. Recording for 20 seconds.'
+i=0
+while [ "$i" -lt 20 ]; do
+    printf '%02d ' "$i"
+    cat "$status"
+    i=$((i + 1))
+    sleep 1
+done
