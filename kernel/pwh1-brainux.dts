@@ -23,8 +23,8 @@
     chosen {
         // shortcut: isolate display until USB PHY reset no longer corrupts it.
         brainux,display-only;
-        // Early board setup selects PSTOP3 before the first CPU idle.
-        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1";
+        // shortcut: avoid WFI until firmware low-power handoff is understood.
+        bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1 nohlt";
         #address-cells = <1>;
         #size-cells = <1>;
         ranges;
