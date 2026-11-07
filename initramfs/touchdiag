@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+state=/sys/bus/platform/devices/1fff8080.keyboard/raw_touch
+[ -r "$state" ] || { echo 'Touch state unavailable' >&2; exit 1; }
+echo 'Touch the four corners, drag, then release. Recording for 20 seconds.'
+previous=''
+IFS=' .' read -r started rest </proc/uptime
+now=$started
+while [ "$((now - started))" -lt 20 ]; do
+    current=$(cat "$state")
+    if [ "$current" != "$previous" ]; then
+        printf '%s\n' "$current"
+        previous=$current
+    fi
+    sleep 0.1
+    IFS=' .' read -r now rest </proc/uptime
+done

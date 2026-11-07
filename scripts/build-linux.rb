@@ -60,6 +60,7 @@ FileUtils.cp(File.join(root, 'initramfs/keycodes'), File.join(fs, 'sbin/keycodes
 FileUtils.cp(File.join(root, 'initramfs/keymap'), File.join(fs, 'sbin/keymap'))
 FileUtils.install(File.join(root, 'initramfs/wfi-test'), File.join(fs, 'sbin/wfi-test'), mode: 0755)
 FileUtils.chmod(0755, [File.join(fs, 'init'), File.join(fs, 'sbin/boot-root'), File.join(fs, 'sbin/keycodes'), File.join(fs, 'sbin/keymap')])
+FileUtils.install(File.join(root, 'initramfs/touchdiag'), File.join(fs, 'sbin/touchdiag'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/keydiag'), File.join(fs, 'sbin/keydiag'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/keyrecover'), File.join(fs, 'sbin/keyrecover'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/m4diag'), File.join(fs, 'sbin/m4diag'), mode: 0755)

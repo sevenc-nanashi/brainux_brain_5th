@@ -20,6 +20,7 @@ struct pwh1_keys {
 	void __iomem *event_gate;
 	void __iomem *mu;
 	void __iomem *backlight_state;
+	void __iomem *touch_state;
 	struct backlight_device *backlight;
 	bool lid_closed;
 	u32 discarded;
@@ -200,6 +201,50 @@ static const struct backlight_ops pwh1_backlight_ops = {
 	.update_status = pwh1_backlight_update,
 	.get_brightness = pwh1_backlight_get,
 };
+
+static void pwh1_touch_poll(struct input_dev *input)
+{
+	struct pwh1_keys *keys = input_get_drvdata(input);
+	void __iomem *touch = keys->touch_state;
+	u8 state = readb(touch);
+	u32 x = readl(touch + 4), y = readl(touch + 8);
+	u32 angle = readl(keys->rtos + 0x607c);
+	u32 tmp;
+
+	/* Skip M4's down/debounce transitions and samples changed during reads. */
+	if (state != readb(touch) || x != readl(touch + 4) ||
+	    y != readl(touch + 8) || (state != 0 && state != 1 && state != 3))
+		return;
+	if (state != 3 || !readb(touch + 2)) {
+		input_report_key(input, BTN_TOUCH, 0);
+		input_sync(input);
+		return;
+	}
+	/* Undo V690_H1 1ffd8356's portrait transform, retaining its calibration. */
+	if (angle == 270) {
+		tmp = x;
+		x = y;
+		y = 480 - tmp;
+	}
+	if (x > 853 || y > 479)
+		return;
+	input_report_key(input, BTN_TOUCH, 1);
+	input_report_abs(input, ABS_X, x);
+	input_report_abs(input, ABS_Y, y);
+	input_sync(input);
+}
+
+static ssize_t raw_touch_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+	void __iomem *touch = keys->touch_state;
+
+	return sysfs_emit(buf, "state=%u enabled=%u x=%u y=%u angle=%u\n",
+		readb(touch), readb(touch + 2), readl(touch + 4),
+		readl(touch + 8), readl(keys->rtos + 0x607c));
+}
+static DEVICE_ATTR_RO(raw_touch);
 
 static void pwh1_keys_poll(struct input_dev *input)
 {
@@ -418,6 +463,7 @@ static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_WO(recover);
 
 static struct attribute *pwh1_keys_attrs[] = {
+	&dev_attr_raw_touch.attr,
 	&dev_attr_raw_keys.attr,
 	&dev_attr_m4_status.attr,
 	&dev_attr_gpio_status.attr,
@@ -509,6 +555,15 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	keys->backlight_state = devm_platform_ioremap_resource(pdev, 13);
 	if (IS_ERR(keys->backlight_state))
 		return PTR_ERR(keys->backlight_state);
+	keys->touch_state = devm_platform_ioremap_resource(pdev, 14);
+	if (IS_ERR(keys->touch_state))
+		return PTR_ERR(keys->touch_state);
+	code = devm_platform_ioremap_resource(pdev, 15);
+	if (IS_ERR(code))
+		return PTR_ERR(code);
+	if (readw(code) != 0xb5f8 || readw(code + 2) != 0x4607 ||
+	    readw(code + 4) != 0x460c || readw(code + 6) != 0x4615)
+		return dev_err_probe(&pdev->dev, -ENODEV, "M4 touch firmware mismatch\n");
 	props.brightness = readl(keys->backlight_state + 4) == 2;
 	backlight = devm_backlight_device_register(&pdev->dev, "pwh1", &pdev->dev,
 		keys, &pwh1_backlight_ops, &props);
@@ -516,6 +571,24 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 		return PTR_ERR(backlight);
 	keys->backlight = backlight;
 	platform_set_drvdata(pdev, keys);
+
+	input = devm_input_allocate_device(&pdev->dev);
+	if (!input)
+		return -ENOMEM;
+	input->name = "PW-H1 firmware touchscreen";
+	input->id.bustype = BUS_HOST;
+	input_set_drvdata(input, keys);
+	input_set_capability(input, EV_KEY, BTN_TOUCH);
+	__set_bit(INPUT_PROP_DIRECT, input->propbit);
+	input_set_abs_params(input, ABS_X, 0, 853, 0, 0);
+	input_set_abs_params(input, ABS_Y, 0, 479, 0, 0);
+	ret = input_setup_polling(input, pwh1_touch_poll);
+	if (ret)
+		return ret;
+	input_set_poll_interval(input, 20);
+	ret = input_register_device(input);
+	if (ret)
+		return ret;
 
 	input = devm_input_allocate_device(&pdev->dev);
 	if (!input)
