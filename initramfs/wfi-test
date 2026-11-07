@@ -6,10 +6,12 @@ keys=/sys/bus/platform/devices/1fff8080.keyboard/raw_keys
 snapshot() {
     printf 'Uptime: '
     cat /proc/uptime
-    awk '/arch_timer/ {print}' /proc/interrupts
+    awk '/arch_timer|i.MX TPM/ {print}' /proc/interrupts
     printf 'Keys: '
     cat "$keys"
 }
+echo 'Clocksource:'
+cat /sys/devices/system/clocksource/clocksource0/current_clocksource
 echo 'BEFORE: one WFI with shallow SMC mode.'
 echo 'At ENTER, wait 3 seconds, then press a key.'
 echo 'If still frozen, record the last marker and reset.'
@@ -23,7 +25,7 @@ while [ "$i" -lt 10 ]; do
     sleep 1
     i=$((i + 1))
 done
-echo 'DONE: normal idle is still polling.'
+echo 'DONE: normal idle uses shallow WFI.'
 
-echo 'Timer comparison (cycles / TST-us):'
+echo 'TPM comparison (cycles / TST-us):'
 dmesg | sed -n '/WFI TEST:/p' | tail -n 9

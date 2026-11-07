@@ -473,3 +473,25 @@ ENOSYSでもエラー表示が出ない。カーネルで互換APIを有効化�
 AFTERの10回の表示が一気に出たことだけではWFI復帰時のタイマー異常を示さない。
 まず再起動直後のsleep 10が約10秒待つことを確認してから、wfi-testを再実行する。
 WFIでタイマー復帰せずキー操作を必要とする現象は、別途検証を継続する。
+
+### diag 36: TPMのDoze停止解除と測定対象の訂正
+
+diag 35の報告はBEFORE 20090/20092、SLEEP 0/14196474、AFTER 20083/20084。
+ここで測っていたarch_timer_read_counterはARM内蔵カウンターであり、Linuxが選択した
+clocksourceとは限らない。PW-H1のDTにはarm,armv7-timerノードがなく、tpm5が有効である。
+「LinuxのカウンターがWFIで停止した」とした以前の解釈を訂正する。
+
+既存のNXP timer-imx-tpmドライバーはSC/CNT/MOD/C0SCを初期化するがCONFを引き継いでいた。
+NXP公開SDKのMCIMX7U5_cm4.hではTPM CONF(0x84)のDOZEEN(bit5)を1にするとDoze中の
+カウントが停止する。PW-H1だけ、カウンター停止中にこのビットを解除し、読み戻しを検証する。
+変更前後のCONFはdmesgへ記録する。他のビットと他機種の動作は維持する。
+https://github.com/nxp-mcuxpresso/mcux-sdk/blob/main/devices/MCIMX7U5/MCIMX7U5_cm4.h
+
+バスを維持するSMC1 PSTOP3設定を初期idle前に行い、nohltを外す。TPM clocksource/eventの
+既存実装を使い、新しいタイマーは追加しない。CLKSRC_IMX_TPMをビルドの必須検証へ追加する。
+診断はTPM5 CNTをTSTMRと比較し、16/32bitのカウンター周回を処理する。TPMへの診断用アクセスは
+読取りだけとし、wfi-testはcurrent_clocksourceとTPM割り込み数も表示する。
+
+DOZEENの実機初期値と、この変更による復帰の改善は未確認。BOOT-diag35.BINを保存する。
+起動後の入力・表示、sleep 10の実時間、キー操作なしでwfi-testが完了するかを確認する。
+ARMカウンターが止まること自体はLinuxがTPMを使う場合の不具合とは限らない。
