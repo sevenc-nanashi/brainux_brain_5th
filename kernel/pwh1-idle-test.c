@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <clocksource/arm_arch_timer.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -10,10 +11,49 @@
 /* Explicit diagnostic only; normal idle remains polling. */
 static DEFINE_MUTEX(test_lock);
 
+struct pwh1_idle_test {
+	void __iomem *smc;
+	void __iomem *tstmr;
+};
+
+/* IRQs must be masked across the low read and latched high read. */
+static u64 timestamp(struct pwh1_idle_test *test)
+{
+	u32 low = readl(test->tstmr);
+	u32 high = readl(test->tstmr + 4);
+
+	return ((u64)high << 32) | low;
+}
+
+static void timer_state(const char *phase)
+{
+	u32 physical, virtual, frequency;
+
+	asm volatile("mrc p15, 0, %0, c14, c2, 1" : "=r" (physical));
+	asm volatile("mrc p15, 0, %0, c14, c3, 1" : "=r" (virtual));
+	asm volatile("mrc p15, 0, %0, c14, c0, 0" : "=r" (frequency));
+	pr_emerg("WFI TEST: %s PCTL=%x VCTL=%x FRQ=%u\n",
+		 phase, physical, virtual, frequency);
+}
+
+static void timer_rate(struct pwh1_idle_test *test, const char *phase)
+{
+	u64 stamp = timestamp(test);
+	u64 counter = arch_timer_read_counter();
+	u64 elapsed, cycles;
+
+	mdelay(20);
+	cycles = arch_timer_read_counter() - counter;
+	elapsed = timestamp(test) - stamp;
+	pr_emerg("WFI TEST: %s cycles=%llu TST-us=%llu\n", phase, cycles, elapsed);
+}
+
 static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count)
 {
-	void __iomem *smc = dev_get_drvdata(dev);
+	struct pwh1_idle_test *test = dev_get_drvdata(dev);
+	void __iomem *smc = test->smc;
+	u64 stamp, counter, elapsed, cycles;
 	unsigned long flags;
 	u32 before, shallow, after;
 	u32 mask = GENMASK(17, 16) | GENMASK(2, 0);
@@ -26,6 +66,8 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 	/* Allow the console's last line to reach scanout before sleeping. */
 	msleep(100);
 	local_irq_save(flags);
+	timer_rate(test, "BEFORE rate");
+	timer_state("BEFORE");
 	before = readl(smc + 0x10);
 	shallow = (before & ~mask) | (3 << 16);
 	writel(shallow, smc + 0x10);
@@ -37,10 +79,17 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 		return -EIO;
 	}
 	pr_emerg("WFI TEST: ENTER PMCTRL=%08x -> %08x\n", before, after);
+	stamp = timestamp(test);
+	counter = arch_timer_read_counter();
 	cpu_do_idle();
+	cycles = arch_timer_read_counter() - counter;
+	elapsed = timestamp(test) - stamp;
 	pr_emerg("WFI TEST: RETURN, IRQs still masked\n");
 	writel(before, smc + 0x10);
 	after = readl(smc + 0x10);
+	pr_emerg("WFI TEST: SLEEP cycles=%llu TST-us=%llu\n", cycles, elapsed);
+	timer_state("AFTER");
+	timer_rate(test, "AFTER rate");
 	local_irq_restore(flags);
 	pr_emerg("WFI TEST: IRQs restored, PMCTRL=%08x\n", after);
 	mutex_unlock(&test_lock);
@@ -58,11 +107,18 @@ ATTRIBUTE_GROUPS(pwh1_idle_test);
 
 static int pwh1_idle_test_probe(struct platform_device *pdev)
 {
-	void __iomem *smc = devm_platform_ioremap_resource(pdev, 0);
+	struct pwh1_idle_test *test;
 
-	if (IS_ERR(smc))
-		return PTR_ERR(smc);
-	platform_set_drvdata(pdev, smc);
+	test = devm_kzalloc(&pdev->dev, sizeof(*test), GFP_KERNEL);
+	if (!test)
+		return -ENOMEM;
+	test->smc = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(test->smc))
+		return PTR_ERR(test->smc);
+	test->tstmr = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(test->tstmr))
+		return PTR_ERR(test->tstmr);
+	platform_set_drvdata(pdev, test);
 	return 0;
 }
 

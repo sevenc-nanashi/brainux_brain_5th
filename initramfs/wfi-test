@@ -11,7 +11,8 @@ snapshot() {
     cat "$keys"
 }
 echo 'BEFORE: one WFI with shallow SMC mode.'
-echo 'If frozen, record the last marker and reset.'
+echo 'At ENTER, wait 3 seconds, then press a key.'
+echo 'If still frozen, record the last marker and reset.'
 snapshot
 sync
 printf '1\n' > "$run"
@@ -23,3 +24,6 @@ while [ "$i" -lt 10 ]; do
     i=$((i + 1))
 done
 echo 'DONE: normal idle is still polling.'
+
+echo 'Timer comparison (cycles / TST-us):'
+dmesg | sed -n '/WFI TEST:/p' | tail -n 9
