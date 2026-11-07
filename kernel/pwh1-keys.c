@@ -11,6 +11,7 @@ struct pwh1_keys {
 	void __iomem *state;
 	void __iomem *queue;
 	void __iomem *gate;
+	void __iomem *portb;
 	u32 discarded;
 	bool symbols;
 	bool mode_down;
@@ -183,8 +184,34 @@ static ssize_t firmware_status_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(firmware_status);
 
+/* V690_H1 1ffdd7d2: rearm the seven key columns, excluding PTB1. */
+static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
+                             const char *buf, size_t count)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+	unsigned int pin;
+
+	if (!sysfs_streq(buf, "1"))
+		return -EINVAL;
+	if (readb(keys->state) != 1 || (readl(keys->state + 8) & 0xffffff))
+		return -EBUSY;
+	for (pin = 0; pin < 20; pin++) {
+		if ((BIT(pin) & 0x942c8) &&
+		    (readl(keys->portb + pin * 4) & GENMASK(19, 16)))
+			return -EALREADY;
+	}
+	/* shortcut: manual recovery only until M4's lost rearm is understood. */
+	writel(0x010842c8, keys->portb + 0x88);
+	writel(0x01080009, keys->portb + 0x8c);
+	readl(keys->portb + 3 * 4);
+	dev_info(dev, "rearmed key column interrupts\n");
+	return count;
+}
+static DEVICE_ATTR_WO(recover);
+
 static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_raw_keys.attr,
+	&dev_attr_recover.attr,
 	&dev_attr_firmware_status.attr,
 	&dev_attr_key_mode.attr,
 	&dev_attr_discarded_notifications.attr,
@@ -226,6 +253,9 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 	if (readw(code) != 0xe92d || readw(code + 2) != 0x43fe ||
 	    readw(code + 4) != 0x4680 || readw(code + 6) != 0x000d)
 		return dev_err_probe(&pdev->dev, -ENODEV, "M4 message firmware mismatch\n");
+	keys->portb = devm_platform_ioremap_resource(pdev, 5);
+	if (IS_ERR(keys->portb))
+		return PTR_ERR(keys->portb);
 	platform_set_drvdata(pdev, keys);
 
 	input = devm_input_allocate_device(&pdev->dev);
