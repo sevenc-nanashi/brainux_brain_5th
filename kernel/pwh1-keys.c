@@ -15,7 +15,9 @@ struct pwh1_keys {
 	void __iomem *iomux;
 	void __iomem *gpio;
 	void __iomem *rtos;
+	void __iomem *rpc_gate;
 	u32 discarded;
+	u32 acknowledged;
 	bool symbols;
 	bool mode_down;
 	u32 held;
@@ -100,6 +102,29 @@ unlock:
 	writeb(0, keys->gate);
 }
 
+/* V690_H1 1ffd481c sends synchronous calls; 1ffde1f8 completes set-event. */
+static void pwh1_ack_events(struct pwh1_keys *keys)
+{
+	void __iomem *rpc = keys->rtos + 0x6e60;
+
+	/* M4 owns gate 3 until it consumes our response; the receiver never locks it. */
+	if ((readb(keys->rpc_gate) & 0xf) != 1 || readl(rpc + 4) ||
+	    !readl(rpc + 0x10))
+		return;
+	/* shortcut: only retired A7 event notifications; other RPCs need real handlers. */
+	if (WARN_ON_ONCE(readl(keys->rtos + 0x6ec8) != 0x20006e60 ||
+			 readl(rpc) != 3 || readl(rpc + 0x10) != 0xffffff19 ||
+			 readl(rpc + 0x14) >> 24 != 1 ||
+			 readl(rpc + 0x18) || readl(rpc + 0x1c) != 10 ||
+			 readl(rpc + 0x20) || readl(rpc + 0x24) != 2))
+		return;
+	/* Linux consumes the notification; no original A7 task remains to wake. */
+	writel(0, rpc + 8);
+	wmb();
+	writel(1, rpc + 4);
+	WRITE_ONCE(keys->acknowledged, keys->acknowledged + 1);
+}
+
 static void pwh1_keys_poll(struct input_dev *input)
 {
 	struct pwh1_keys *keys = input_get_drvdata(input);
@@ -110,6 +135,7 @@ static void pwh1_keys_poll(struct input_dev *input)
 	DECLARE_BITMAP(down, KEY_CNT);
 
 	pwh1_discard_notifications(keys);
+	pwh1_ack_events(keys);
 
 	/* State 2 is transitional; state 1 must have cleared the key bytes. */
 	if ((state != 1 && state != 3) || readb(keys->state) != state ||
@@ -186,6 +212,19 @@ static ssize_t firmware_status_show(struct device *dev,
 		readl(keys->queue + 0x24), READ_ONCE(keys->discarded));
 }
 static DEVICE_ATTR_RO(firmware_status);
+
+static ssize_t rpc_status_show(struct device *dev, struct device_attribute *attr,
+			       char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+	void __iomem *rpc = keys->rtos + 0x6e60;
+
+	return sysfs_emit(buf, "RPC: acked=%u gate=%x done=%u cmd=%08x event=%u bits=%08x\n",
+		READ_ONCE(keys->acknowledged), readb(keys->rpc_gate),
+		readl(rpc + 4), readl(rpc + 0x10),
+		readl(rpc + 0x28), readl(rpc + 0x2c));
+}
+static DEVICE_ATTR_RO(rpc_status);
 
 static ssize_t gpio_status_show(struct device *dev, struct device_attribute *attr,
                                 char *buf)
@@ -306,6 +345,7 @@ static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_gpio_status.attr,
 	&dev_attr_recover.attr,
 	&dev_attr_firmware_status.attr,
+	&dev_attr_rpc_status.attr,
 	&dev_attr_key_mode.attr,
 	&dev_attr_discarded_notifications.attr,
 	NULL,
@@ -372,6 +412,14 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 		if (!keys->rtos)
 			return -ENOMEM;
 	}
+	keys->rpc_gate = devm_platform_ioremap_resource(pdev, 9);
+	if (IS_ERR(keys->rpc_gate))
+		return PTR_ERR(keys->rpc_gate);
+	code = devm_platform_ioremap_resource(pdev, 10);
+	if (IS_ERR(code))
+		return PTR_ERR(code);
+	if (readl(code) != 0x4ff8e92d || readl(code + 4) != 0x980b4604)
+		return dev_err_probe(&pdev->dev, -ENODEV, "M4 RPC firmware mismatch\n");
 	platform_set_drvdata(pdev, keys);
 
 	input = devm_input_allocate_device(&pdev->dev);
