@@ -20,6 +20,8 @@ struct pwh1_keys {
 	void __iomem *event_gate;
 	void __iomem *mu;
 	void __iomem *backlight_state;
+	struct backlight_device *backlight;
+	bool lid_closed;
 	u32 discarded;
 	u32 acknowledged;
 	bool symbols;
@@ -135,7 +137,16 @@ static int pwh1_backlight_update(struct backlight_device *bd)
 	void __iomem *q = keys->rtos + 0x6800;
 	void __iomem *entry;
 	u32 count, head;
+	u8 mode = readl(keys->rtos + 0x6094) & 0xff;
+	bool on;
 	int ret = 0;
+
+	/* V690_H1 property 1040: 1=open, 2=closed, 3=reverse-folded. */
+	if (mode >= 1 && mode <= 3)
+		keys->lid_closed = mode == 2;
+	on = backlight_get_brightness(bd) && !keys->lid_closed;
+	if (on == (readl(keys->backlight_state + 4) == 2))
+		return 0;
 
 	/* V690_H1 1ffd475c: M4's asynchronous RPC queue, protected by gate 0. */
 	if (readb(keys->event_gate) & 0xf)
@@ -165,7 +176,7 @@ static int pwh1_backlight_update(struct backlight_device *bd)
 	writel(1, entry + 20); /* destination M4 */
 	writel(8, entry + 24); /* backlight task's event group */
 	/* Keep the firmware's calibrated brightness; event 1=on, 2=off. */
-	writel(backlight_get_brightness(bd) ? 1 : 2, entry + 28);
+	writel(on ? 1 : 2, entry + 28);
 	writel((head + 1) % 16, q + 8);
 	writel(count + 1, q + 4);
 unlock:
@@ -201,6 +212,8 @@ static void pwh1_keys_poll(struct input_dev *input)
 
 	pwh1_discard_notifications(keys);
 	pwh1_ack_events(keys);
+	/* Retry busy queues and reconcile coalesced events after rapid lid changes. */
+	backlight_update_status(keys->backlight);
 
 	/* State 2 is transitional; state 1 must have cleared the key bytes. */
 	if ((state != 1 && state != 3) || readb(keys->state) != state ||
@@ -501,6 +514,7 @@ static int pwh1_keys_probe(struct platform_device *pdev)
 		keys, &pwh1_backlight_ops, &props);
 	if (IS_ERR(backlight))
 		return PTR_ERR(backlight);
+	keys->backlight = backlight;
 	platform_set_drvdata(pdev, keys);
 
 	input = devm_input_allocate_device(&pdev->dev);
