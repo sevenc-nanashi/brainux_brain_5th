@@ -1,3 +1,5 @@
+![Vibecoded by GPT-6-Astra](https://img.shields.io/badge/Vibecoded--by-GPT--6--Astra-red)
+
 # Brainux on PW-H1
 
 PW-H1 / V690_H1の追加アプリからLinuxへ移行する実験用ローダー。
