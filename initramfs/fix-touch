@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 0 ] || { echo 'usage: fix-touch' >&2; exit 1; }
+[ -b /dev/mmcblk0p2 ] || { echo 'SD rootfs partition not found' >&2; exit 1; }
+if mountpoint -q /newroot; then
+    echo '/newroot is already mounted; unmount it before retrying' >&2
+    exit 1
+fi
+mount -t ext4 -o ro /dev/mmcblk0p2 /newroot
+temporary=''
+trap '[ -z "$temporary" ] || rm -f "$temporary"; umount /newroot' EXIT
+directory=/newroot/etc/X11/xorg.conf.d
+[ -d "$directory" ] && [ ! -L "$directory" ] || { echo 'Xorg config directory missing or symlinked' >&2; exit 1; }
+config=$directory/99-pwh1-touch.conf
+[ ! -L "$config" ] || { echo 'Touch config is a symlink; unchanged' >&2; exit 1; }
+mount -o remount,rw /newroot
+temporary=$(mktemp "$directory/.pwh1-touch.XXXXXX")
+# M4 already calibrated the coordinates; override generic Xorg calibration.
+cat >"$temporary" <<'EOF'
+Section "InputClass"
+    Identifier "PW-H1 calibrated touchscreen"
+    MatchProduct "PW-H1 firmware touchscreen"
+    MatchIsTouchscreen "on"
+    Driver "evdev"
+    Option "Calibration" "0 853 0 479"
+    Option "SwapAxes" "false"
+    Option "InvertX" "false"
+    Option "InvertY" "false"
+    Option "TransformationMatrix" "1 0 0 0 1 0 0 0 1"
+EndSection
+EOF
+if [ -e "$config" ]; then
+    cmp -s "$temporary" "$config" || { echo 'Different PW-H1 touch config exists; unchanged' >&2; exit 1; }
+    echo 'Touch coordinates already configured; unchanged'
+else
+    chmod 644 "$temporary"
+    mv "$temporary" "$config"
+    temporary=''
+    echo 'Fixed: calibrated touch coordinates; takes effect at the next GUI start'
+fi
