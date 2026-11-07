@@ -3,10 +3,18 @@ set -eu
 run=/sys/bus/platform/devices/1fff8080.keyboard/recover
 [ -w "$run" ] || { echo 'Keyboard recovery unavailable' >&2; exit 1; }
 echo 'Close and reopen the lid now. Release all keys. Recovery in 10 seconds.'
+cat /sys/bus/platform/devices/1fff8080.keyboard/gpio_status
 sleep 10
+cat /sys/bus/platform/devices/1fff8080.keyboard/gpio_status
 if printf '1\n' > "$run"; then
     echo 'Key interrupts rearmed. Try typing.'
 else
     echo 'Recovery refused: keys active or interrupts already enabled.' >&2
     exit 1
 fi
+i=0
+while [ "$i" -lt 10 ]; do
+    cat /sys/bus/platform/devices/1fff8080.keyboard/gpio_status
+    i=$((i + 1))
+    sleep 1
+done

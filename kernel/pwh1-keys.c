@@ -186,6 +186,24 @@ static ssize_t firmware_status_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(firmware_status);
 
+static ssize_t gpio_status_show(struct device *dev, struct device_attribute *attr,
+                                char *buf)
+{
+	struct pwh1_keys *keys = dev_get_drvdata(dev);
+	u32 enabled = 0;
+	unsigned int pin;
+
+	for (pin = 0; pin < 20; pin++)
+		if ((BIT(pin) & 0x942c8) &&
+		    (readl(keys->portb + pin * 4) & GENMASK(19, 16)))
+			enabled |= BIT(pin);
+	return sysfs_emit(buf, "IRQ=%05x pending=%05x input=%05x rows=%08x/%08x\n",
+		enabled, readl(keys->portb + 0xa0) & 0x942c8,
+		readl(keys->gpio + 0x50) & 0x942c8,
+		readl(keys->gpio), readl(keys->gpio + 0x40));
+}
+static DEVICE_ATTR_RO(gpio_status);
+
 /* V690_H1 1ffdd7d2: rearm the seven key columns, excluding PTB1. */
 static ssize_t recover_store(struct device *dev, struct device_attribute *attr,
                              const char *buf, size_t count)
@@ -222,6 +240,7 @@ static DEVICE_ATTR_WO(recover);
 
 static struct attribute *pwh1_keys_attrs[] = {
 	&dev_attr_raw_keys.attr,
+	&dev_attr_gpio_status.attr,
 	&dev_attr_recover.attr,
 	&dev_attr_firmware_status.attr,
 	&dev_attr_key_mode.attr,
