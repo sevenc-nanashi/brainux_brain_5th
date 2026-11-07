@@ -16,11 +16,16 @@ struct pwh1_idle_test {
 	void __iomem *tstmr;
 };
 
-/* IRQs must be masked across the low read and latched high read. */
+/* Protect the latched high word from competing reads in IRQ handlers. */
 static u64 timestamp(struct pwh1_idle_test *test)
 {
-	u32 low = readl(test->tstmr);
-	u32 high = readl(test->tstmr + 4);
+	unsigned long flags;
+	u32 low, high;
+
+	local_irq_save(flags);
+	low = readl(test->tstmr);
+	high = readl(test->tstmr + 4);
+	local_irq_restore(flags);
 
 	return ((u64)high << 32) | low;
 }
@@ -63,11 +68,12 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 	if (!mutex_trylock(&test_lock))
 		return -EBUSY;
 	pr_emerg("WFI TEST: preparing; next tick should wake CPU\n");
-	/* Allow the console's last line to reach scanout before sleeping. */
-	msleep(100);
-	local_irq_save(flags);
 	timer_rate(test, "BEFORE rate");
 	timer_state("BEFORE");
+	pr_emerg("WFI TEST: ENTER (after console settles)\n");
+	/* Drain console work with IRQs enabled; do not create a pending tick. */
+	msleep(100);
+	local_irq_save(flags);
 	before = readl(smc + 0x10);
 	shallow = (before & ~mask) | (3 << 16);
 	writel(shallow, smc + 0x10);
@@ -78,7 +84,6 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 		mutex_unlock(&test_lock);
 		return -EIO;
 	}
-	pr_emerg("WFI TEST: ENTER PMCTRL=%08x -> %08x\n", before, after);
 	stamp = timestamp(test);
 	counter = arch_timer_read_counter();
 	cpu_do_idle();
@@ -89,8 +94,8 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 	after = readl(smc + 0x10);
 	pr_emerg("WFI TEST: SLEEP cycles=%llu TST-us=%llu\n", cycles, elapsed);
 	timer_state("AFTER");
-	timer_rate(test, "AFTER rate");
 	local_irq_restore(flags);
+	timer_rate(test, "AFTER rate");
 	pr_emerg("WFI TEST: IRQs restored, PMCTRL=%08x\n", after);
 	mutex_unlock(&test_lock);
 	if ((after & mask) != (before & mask))

@@ -8,7 +8,7 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 33, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 34, @BUILD_REVISION@)\n'
 if [ -e /proc/device-tree/chosen/brainux,display-only ]; then
     echo 'Display check: USB disabled, CPU idle polling.'
 else
@@ -41,7 +41,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 33, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 34, @BUILD_REVISION@)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
