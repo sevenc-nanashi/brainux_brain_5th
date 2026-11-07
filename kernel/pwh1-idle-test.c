@@ -88,7 +88,7 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 	struct pwh1_idle_test *test = dev_get_drvdata(dev);
 	void __iomem *smc = test->smc;
 	u64 stamp, counter, elapsed, cycles;
-	struct irq_snapshot pre, post;
+	struct irq_snapshot awake, pre, post;
 	unsigned long flags;
 	u32 before, shallow, after;
 	u32 mask = GENMASK(17, 16) | GENMASK(2, 0);
@@ -99,6 +99,12 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 		return -EBUSY;
 	pr_emerg("WFI TEST: preparing; next tick should wake CPU\n");
 	timer_rate(test, "BEFORE rate");
+	/* Compare delivery with the CPU awake before entering WFI. */
+	local_irq_save(flags);
+	mdelay(20);
+	capture_irq(test, &awake);
+	local_irq_restore(flags);
+	print_irq("AWAKE", &awake);
 	pr_emerg("WFI TEST: ENTER (after console settles)\n");
 	/* Drain console work with IRQs enabled; do not create a pending tick. */
 	msleep(100);
