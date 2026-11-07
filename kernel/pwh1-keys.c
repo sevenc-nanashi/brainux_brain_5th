@@ -218,8 +218,12 @@ static ssize_t m4_status_show(struct device *dev, struct device_attribute *attr,
 {
 	struct pwh1_keys *keys = dev_get_drvdata(dev);
 	void __iomem *tasks, *mutexes, *task, *mutex;
+	void __iomem *running, *flags, *event;
 	u32 ta = readl(keys->rtos + 0x3f50);
 	u32 ma = readl(keys->rtos + 0x3f64);
+	u32 ca = readl(keys->rtos + 0x3f34);
+	u32 fa = readl(keys->rtos + 0x3f58);
+	ssize_t len;
 
 	/* V690_H1 task 7 is the key task; it acquires mutex 1 before scanning. */
 	tasks = rtos_pointer(keys, ta, 32);
@@ -232,9 +236,33 @@ static ssize_t m4_status_show(struct device *dev, struct device_attribute *attr,
 	mutex = rtos_pointer(keys, ma, 0x14);
 	if (!task || !mutex)
 		return sysfs_emit(buf, "M4 objects outside mapped RAM: %08x %08x\n", ta, ma);
-	return sysfs_emit(buf, "task7=%08x id=%u handler=%08x arg=%08x\nmutex1=%08x owner=%u current=%08x\n",
+	len = sysfs_emit(buf, "task7=%08x id=%u handler=%08x arg=%08x\nmutex1=%08x owner=%u current=%08x\n",
 		ta, readw(task + 0x22), readl(task + 0x14), readl(task + 0x4c),
-		ma, readw(mutex + 0x10), readl(keys->rtos + 0x3f34));
+		ma, readw(mutex + 0x10), ca);
+	/* The handler is the last syscall, not a live program counter. */
+	len += sysfs_emit_at(buf, len,
+		"key: flags=%08x wait-id=%u mask=%08x sp=%08x\n",
+		readl(task + 0x10), readw(task + 0x32),
+		readl(task + 0x50), readl(task + 0x34));
+	running = rtos_pointer(keys, ca, 0x74);
+	if (running)
+		len += sysfs_emit_at(buf, len,
+			"current: id=%u flags=%08x handler=%08x arg=%08x\n",
+			readw(running + 0x22), readl(running + 0x10),
+			readl(running + 0x14), readl(running + 0x4c));
+	flags = rtos_pointer(keys, fa, 12);
+	if (!flags)
+		return len + sysfs_emit_at(buf, len, "Invalid event table: %08x\n", fa);
+	fa = readl(flags + 2 * 4);
+	event = rtos_pointer(keys, fa, 0x10);
+	if (!event)
+		return len + sysfs_emit_at(buf, len, "Invalid key event: %08x\n", fa);
+	len += sysfs_emit_at(buf, len,
+		"event2=%08x bits=%08x head=%08x tail=%08x\n",
+		fa, readl(event + 8), readl(event), readl(event + 4));
+	return len + sysfs_emit_at(buf, len,
+		"scheduler: flags=%08x service=%08x\n",
+		readl(keys->rtos + 0x3f00), readl(keys->rtos + 0x3f30));
 }
 static DEVICE_ATTR_RO(m4_status);
 

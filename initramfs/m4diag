@@ -8,3 +8,6 @@ echo BEFORE
 printf '%s\n' "$before"
 echo AFTER
 cat "$base/m4_status" "$base/firmware_status" "$base/gpio_status"
+sleep 2
+echo LATER
+cat "$base/m4_status"
