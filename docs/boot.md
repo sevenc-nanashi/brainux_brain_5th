@@ -503,3 +503,19 @@ diag 36でもキー入力できないとの実機報告あり。TPMのDOZEEN解�
 TPMのDOZEEN解除と実際のTPMを読む診断は維持し、起動時にCONF変更前後と
 current_clocksourceを表示する。手動のwfi-testだけがSMCを一時変更してWFIへ入る。
 まず入力が戻ることと表示されるTPM CONF / Clocksourceを確認する。
+
+### diag 38: TPM比較割り込みとGICの観測
+
+diag 37のSLEEP値は訂正後19789856/6626077（約2.99カウント/µs）で、前後と同じ速度だった。
+TPMのクロック低下という推測を撤回する。WFI中もカウンターが進むことを踏まえ、
+TPM5の比較値・割り込み状態とGICのルーティングをWFI直前/直後に採取する。
+
+TPM5はDTでSPI 22、GICではINTID 54（バンク1のbit22）。PRE/POSTにはCNT/C0V、
+C0SC(CH)、STATUS(ST)、GICのEnable/Pending/Active/Group、Priority/Target、
+Distributor/CPU control、PMR、HPPIR、RPRを表示する。GICのIAR/EOIは操作せず、
+TPMにも書き込まない。IRQ禁止区間では値の保存だけを行い、復帰後の表示はIRQ再開後とする。
+POSTはキー操作で復帰した直後の値なので、その前の待機中の状態そのものとは限らない。
+
+通常のnohltは維持する。wfi-testのENTER後3秒待ってキーを押し、終了時に再表示する
+PRE/POST各3行を記録する。比較割り込みが立っていない場合、GICで保留されている場合、
+IRQがActiveに残っている場合などを区別して次の修正を決める。

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/irqchip/arm-gic.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -14,6 +15,8 @@ struct pwh1_idle_test {
 	void __iomem *smc;
 	void __iomem *tstmr;
 	void __iomem *tpm;
+	void __iomem *gicd;
+	void __iomem *gicc;
 	u32 counter_mask;
 };
 
@@ -31,10 +34,40 @@ static u64 timestamp(struct pwh1_idle_test *test)
 	return ((u64)high << 32) | low;
 }
 
-static void timer_state(struct pwh1_idle_test *test, const char *phase)
+struct irq_snapshot {
+	u32 count, compare, channel, status;
+	u32 enabled, pending, active, group, priority, target;
+	u32 distributor, cpu, mask, highest, running;
+};
+
+static void capture_irq(struct pwh1_idle_test *test, struct irq_snapshot *s)
 {
-	pr_emerg("WFI TEST: %s TPM SC=%08x CONF=%08x\n", phase,
-		 readl(test->tpm + 0x10), readl(test->tpm + 0x84));
+	/* TPM5 is SPI 22, GIC INTID 54: bank 1, bit 22. Never read IAR. */
+	s->count = readl(test->tpm + 0x14);
+	s->compare = readl(test->tpm + 0x24);
+	s->channel = readl(test->tpm + 0x20);
+	s->status = readl(test->tpm + 0x1c);
+	s->enabled = !!(readl(test->gicd + GIC_DIST_ENABLE_SET + 4) & BIT(22));
+	s->pending = !!(readl(test->gicd + GIC_DIST_PENDING_SET + 4) & BIT(22));
+	s->active = !!(readl(test->gicd + GIC_DIST_ACTIVE_SET + 4) & BIT(22));
+	s->group = !!(readl(test->gicd + GIC_DIST_IGROUP + 4) & BIT(22));
+	s->priority = readb(test->gicd + GIC_DIST_PRI + 54);
+	s->target = readb(test->gicd + GIC_DIST_TARGET + 54);
+	s->distributor = readl(test->gicd + GIC_DIST_CTRL);
+	s->cpu = readl(test->gicc + GIC_CPU_CTRL);
+	s->mask = readl(test->gicc + GIC_CPU_PRIMASK);
+	s->highest = readl(test->gicc + GIC_CPU_HIGHPRI);
+	s->running = readl(test->gicc + GIC_CPU_RUNNINGPRI);
+}
+
+static void print_irq(const char *phase, const struct irq_snapshot *s)
+{
+	pr_emerg("WFI TEST: %s CNT=%08x CMP=%08x CH=%x ST=%x\n",
+		 phase, s->count, s->compare, s->channel, s->status);
+	pr_emerg("WFI TEST: %s IRQ54 E=%u P=%u A=%u G=%u PRI=%x TGT=%x\n",
+		 phase, s->enabled, s->pending, s->active, s->group, s->priority, s->target);
+	pr_emerg("WFI TEST: %s GIC D=%x C=%x PMR=%x HPPIR=%x RPR=%x\n",
+		 phase, s->distributor, s->cpu, s->mask, s->highest, s->running);
 }
 
 static void timer_rate(struct pwh1_idle_test *test, const char *phase)
@@ -55,6 +88,7 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 	struct pwh1_idle_test *test = dev_get_drvdata(dev);
 	void __iomem *smc = test->smc;
 	u64 stamp, counter, elapsed, cycles;
+	struct irq_snapshot pre, post;
 	unsigned long flags;
 	u32 before, shallow, after;
 	u32 mask = GENMASK(17, 16) | GENMASK(2, 0);
@@ -65,7 +99,6 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 		return -EBUSY;
 	pr_emerg("WFI TEST: preparing; next tick should wake CPU\n");
 	timer_rate(test, "BEFORE rate");
-	timer_state(test, "BEFORE");
 	pr_emerg("WFI TEST: ENTER (after console settles)\n");
 	/* Drain console work with IRQs enabled; do not create a pending tick. */
 	msleep(100);
@@ -80,17 +113,20 @@ static ssize_t run_store(struct device *dev, struct device_attribute *attr,
 		mutex_unlock(&test_lock);
 		return -EIO;
 	}
+	capture_irq(test, &pre);
 	stamp = timestamp(test);
 	counter = readl(test->tpm + 0x14);
 	cpu_do_idle();
 	cycles = (readl(test->tpm + 0x14) - counter) & test->counter_mask;
 	elapsed = timestamp(test) - stamp;
+	capture_irq(test, &post);
 	pr_emerg("WFI TEST: RETURN, IRQs still masked\n");
 	writel(before, smc + 0x10);
 	after = readl(smc + 0x10);
 	pr_emerg("WFI TEST: SLEEP cycles=%llu TST-us=%llu\n", cycles, elapsed);
-	timer_state(test, "AFTER");
 	local_irq_restore(flags);
+	print_irq("PRE", &pre);
+	print_irq("POST", &post);
 	timer_rate(test, "AFTER rate");
 	pr_emerg("WFI TEST: IRQs restored, PMCTRL=%08x\n", after);
 	mutex_unlock(&test_lock);
@@ -111,6 +147,8 @@ static int pwh1_idle_test_probe(struct platform_device *pdev)
 	struct pwh1_idle_test *test;
 	struct resource *res;
 	u32 width;
+	unsigned int i;
+	void __iomem **shared[3];
 
 	test = devm_kzalloc(&pdev->dev, sizeof(*test), GFP_KERNEL);
 	if (!test)
@@ -121,13 +159,18 @@ static int pwh1_idle_test_probe(struct platform_device *pdev)
 	test->tstmr = devm_platform_ioremap_resource(pdev, 1);
 	if (IS_ERR(test->tstmr))
 		return PTR_ERR(test->tstmr);
-	/* TPM is owned by the clocksource driver; this mapping is read-only. */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
-	if (!res)
-		return -EINVAL;
-	test->tpm = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-	if (!test->tpm)
-		return -ENOMEM;
+	/* Existing timer/GIC drivers own these regions; only read their state. */
+	shared[0] = &test->tpm;
+	shared[1] = &test->gicd;
+	shared[2] = &test->gicc;
+	for (i = 0; i < ARRAY_SIZE(shared); i++) {
+		res = platform_get_resource(pdev, IORESOURCE_MEM, i + 2);
+		if (!res)
+			return -EINVAL;
+		*shared[i] = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+		if (!*shared[i])
+			return -ENOMEM;
+	}
 	width = (readl(test->tpm + 4) >> 16) & 0xff;
 	if (width != 16 && width != 32)
 		return -ENODEV;

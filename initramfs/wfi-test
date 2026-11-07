@@ -27,5 +27,5 @@ while [ "$i" -lt 10 ]; do
 done
 echo 'DONE: normal idle is still polling.'
 
-echo 'TPM comparison (cycles / TST-us):'
-dmesg | sed -n '/WFI TEST:/p' | tail -n 9
+echo 'TPM / GIC report (PRE and POST):'
+dmesg | sed -n '/WFI TEST:/p' | tail -n 13
