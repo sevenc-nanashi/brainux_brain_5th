@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 0 ] || { echo 'usage: fix-screen' >&2; exit 1; }
+[ -b /dev/mmcblk0p2 ] || { echo 'SD rootfs partition not found' >&2; exit 1; }
+if mountpoint -q /newroot; then
+    echo '/newroot is already mounted; unmount it before retrying' >&2
+    exit 1
+fi
+mount -t ext4 -o ro /dev/mmcblk0p2 /newroot
+trap 'umount /newroot' EXIT
+config=/newroot/etc/X11/xorg.conf
+[ -f "$config" ] && [ ! -L "$config" ] || { echo 'xorg.conf not found or is a symlink' >&2; exit 1; }
+driver='^[[:space:]]*Driver[[:space:]]*"fbdev"[[:space:]]*$'
+[ "$(grep -c "$driver" "$config")" -eq 1 ] || { echo 'Expected one fbdev device; unchanged' >&2; exit 1; }
+if grep -q '"Rotate"' "$config"; then
+    echo 'Rotation already configured; unchanged'
+    exit 0
+fi
+mount -o remount,rw /newroot
+# fbdev CW maps (x,y) to (479-y,x), matching fbcon=rotate:1.
+sed -i "/$driver/a\\        Option \"Rotate\" \"CW\"" "$config"
+grep -q 'Option "Rotate" "CW"' "$config"
+echo 'Fixed: Xorg rotation CW; takes effect at the next GUI start'

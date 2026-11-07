@@ -65,6 +65,7 @@ FileUtils.install(File.join(root, 'initramfs/keyrecover'), File.join(fs, 'sbin/k
 FileUtils.install(File.join(root, 'initramfs/m4diag'), File.join(fs, 'sbin/m4diag'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/backlight'), File.join(fs, 'sbin/backlight'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/fix-sd'), File.join(fs, 'sbin/fix-sd'), mode: 0755)
+FileUtils.install(File.join(root, 'initramfs/fix-screen'), File.join(fs, 'sbin/fix-screen'), mode: 0755)
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')
 entries = Dir.glob('**/*', base: fs).sort.map do |path|
