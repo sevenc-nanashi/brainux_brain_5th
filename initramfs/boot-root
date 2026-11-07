@@ -2,7 +2,13 @@
 set -eu
 [ "$#" -eq 1 ] || { echo 'usage: boot-root /dev/mmcblk0p2' >&2; exit 1; }
 case "$1" in /dev/mmcblk0p[0-9]*) ;; *) echo 'Only the SD card is supported' >&2; exit 1 ;; esac
-[ -b "$1" ]
+[ -b "$1" ] || {
+    echo "Block device not found: $1" >&2
+    echo 'Available partitions:' >&2
+    cat /proc/partitions >&2
+    echo 'An SD ext4 partition containing a Brainux rootfs is required.' >&2
+    exit 1
+}
 mount -t ext4 -o ro "$1" /newroot
 if ! chroot /newroot /bin/sh -c 'test -x /sbin/init'; then
     umount /newroot
