@@ -10,11 +10,12 @@ if printf '1\n' > "$run"; then
     echo 'Key interrupts rearmed. Try typing.'
 else
     echo 'Recovery refused: keys active or interrupts already enabled.' >&2
-    exit 1
 fi
+echo 'Hold A for 2 seconds, then release. Watching for 10 seconds.'
 i=0
 while [ "$i" -lt 10 ]; do
     cat /sys/bus/platform/devices/1fff8080.keyboard/gpio_status
+    cat /sys/bus/platform/devices/1fff8080.keyboard/raw_keys
     i=$((i + 1))
     sleep 1
 done
