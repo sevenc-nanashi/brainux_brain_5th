@@ -19,21 +19,16 @@ if ! chroot /newroot /bin/sh -c 'test -x /sbin/init'; then
     echo 'Cannot run rootfs /bin/sh, or /sbin/init is missing' >&2
     exit 1
 fi
-missing=0
 for dir in dev proc sys run; do
     path=/newroot/$dir
     if [ -L "$path" ] || { [ -e "$path" ] && [ ! -d "$path" ]; }; then
         echo "Not a real mount directory: $path" >&2
         exit 1
     fi
-    [ -d "$path" ] || missing=1
 done
-if [ "$missing" -eq 1 ]; then
-    # The distributed image omits /proc and /sys; create the mount targets first.
-    mount -o remount,rw /newroot
-    mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run
-    mount -o remount,ro /newroot
-fi
+# The distributed rootfs has no fstab entry to remount / writable at startup.
+mount -o remount,rw /newroot
+mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run
 # PID 1 performs switch_root; a shell command cannot replace init on its own.
 trap - EXIT
 kill -USR1 1 || { umount /newroot; exit 1; }
