@@ -8,7 +8,7 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 57, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 58, @BUILD_REVISION@)\n'
 if [ -e /proc/device-tree/chosen/brainux,display-only ]; then
     echo 'Display check: USB disabled.'
 else
@@ -41,7 +41,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 57, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 58, @BUILD_REVISION@)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
@@ -103,4 +103,16 @@ echo 'Type fix-screen once to rotate the Xorg desktop.'
 echo 'Type fix-touch once to set calibrated touchscreen coordinates.'
 echo 'Type fix-sd once to fix the SD boot partition path.'
 echo 'Use boot-root /dev/mmcblk0p2 to start an existing Brainux rootfs.'
+# The loader selects SD boot without changing the persistent bundle.
+mode=$(od -An -tu1 /proc/device-tree/chosen/brainux,boot-root 2>/dev/null | tr -d ' \n')
+if [ "$mode" = 0001 ]; then
+    echo 'Starting Brainux from SD...'
+    attempts=0
+    while [ ! -b /dev/mmcblk0p2 ] && [ "$attempts" -lt 10 ]; do
+        sleep 1
+        attempts=$((attempts + 1))
+    done
+    /sbin/boot-root /dev/mmcblk0p2 || echo 'SD boot failed. Diagnostic shell available.'
+fi
+
 while :; do setsid cttyhack /bin/sh & wait "$!"; sleep 1; done

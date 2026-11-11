@@ -2,6 +2,7 @@
 #![no_main]
 extern crate alloc;
 mod entry;
+mod loader_screen;
 mod paths;
 mod quiesce;
 
@@ -10,7 +11,7 @@ use brainux_probe::bundle::{
     Bundle, CAPACITY, DTB_DEST, FRAMEBUFFER, FRAMEBUFFER_RESERVE, IMAGE_DEST,
 };
 use core::{arch::global_asm, ptr};
-use reflex::{Action, Application, Event, display, fs, peg, text};
+use reflex::{Action, Application, Event, fs, peg};
 
 global_asm!(include_str!("handoff.S"), options(raw));
 unsafe extern "C" {
@@ -27,7 +28,6 @@ static mut PAGE_TABLE: PageTable = PageTable([0; 4096]);
 struct Loader {
     status: String,
     loaded: usize,
-    armed: bool,
 }
 
 unsafe fn verify_mapping() -> Result<(), &'static str> {
@@ -103,14 +103,9 @@ fn main() -> Loader {
     match load() {
         Ok(loaded) => Loader {
             loaded,
-            armed: false,
-            status: String::from("BOOT.BIN verified. Enter: prepare boot"),
+            status: String::from("Boot image verified"),
         },
-        Err(status) => Loader {
-            loaded: 0,
-            armed: false,
-            status,
-        },
+        Err(status) => Loader { loaded: 0, status },
     }
 }
 
@@ -170,28 +165,32 @@ impl Application for Loader {
         if self.loaded == 0 {
             return Action::None;
         }
-        if code == peg::key::ENTER && !self.armed {
-            self.armed = true;
-            self.status = String::from("B: boot Linux (reset to return)   Esc: cancel");
-            return Action::Redraw;
-        }
-        if self.armed && (code == b'B' as u16 || code == b'b' as u16) {
+        let direct = code == peg::key::ENTER;
+        if direct || code == b'D' as u16 || code == b'd' as u16 {
             unsafe {
-                quiesce::progress("Boot: B received (power mask 1)");
+                quiesce::progress("Boot: launch requested");
                 if let Err(error) = quiesce::check() {
                     self.status = String::from(error);
-                    self.armed = false;
                     return Action::Redraw;
                 }
                 if let Err(error) = save_boot_snapshot() {
                     self.status = error;
-                    self.armed = false;
                     return Action::Redraw;
                 }
                 quiesce::progress("Boot: verifying payload");
                 let bytes =
                     core::slice::from_raw_parts(ptr::addr_of!(PAYLOAD).cast::<u8>(), self.loaded);
                 let bundle = Bundle::parse(bytes).expect("Payload changed after verification");
+                let tree = fdt::Fdt::new(bundle.dtb).expect("Verified DTB");
+                let selector = tree
+                    .find_node("/chosen")
+                    .and_then(|node| node.property("brainux,boot-root"))
+                    .filter(|p| p.value.len() == 4)
+                    .map(|p| p.value.as_ptr() as usize - bundle.dtb.as_ptr() as usize);
+                if direct && selector.is_none() {
+                    self.status = String::from("Update BOOT.BIN for SD boot. D: diagnostics");
+                    return Action::Redraw;
+                }
                 let physical = |slice: &[u8]| slice.as_ptr() as u32 - 0x9000_0000 + 0x6710_0000;
                 let image = physical(bundle.image);
                 let dtb = physical(bundle.dtb);
@@ -211,6 +210,15 @@ impl Application for Loader {
                         .add(0x900 + section)
                         .write_volatile(((0x671 + section as u32) << 20) | 0x1c02);
                 }
+                if let Some(offset) = selector {
+                    let payload_offset =
+                        bundle.dtb.as_ptr() as usize - ptr::addr_of!(PAYLOAD) as usize + offset;
+                    ptr::copy_nonoverlapping(
+                        u32::from(direct).to_be_bytes().as_ptr(),
+                        ptr::addr_of_mut!(PAYLOAD).cast::<u8>().add(payload_offset),
+                        4,
+                    );
+                }
                 quiesce::stop();
                 handoff(image, image_len, dtb, dtb_len);
             }
@@ -218,25 +226,7 @@ impl Application for Loader {
         Action::None
     }
     fn draw(&self, pixels: &mut [u16]) {
-        pixels.fill(0xffff);
-        for (y, line) in [
-            (30, "Brainux / PW-H1 Linux loader (power mask 1)"),
-            (90, self.status.as_str()),
-            (160, "Image -> 61008000   DTB -> 67000000"),
-            (210, "USB serial console: 115200 / ttyGS0"),
-            (290, "Experimental: V690_H1 only"),
-            (350, "Esc: exit"),
-        ] {
-            text::draw(
-                |x, y, c| pixels[y * display::WIDTH + x] = c,
-                12,
-                y,
-                line,
-                0,
-                0xffff,
-                1,
-            );
-        }
+        loader_screen::draw(pixels, self.loaded, &self.status);
     }
 }
 const _: () = {
