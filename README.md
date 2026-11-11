@@ -7,7 +7,7 @@ PW-H1 / V690_H1の追加アプリからLinuxへ移行する実験用ローダー
 
 **診断ログの保存、メモリマッピング、Linuxからinitramfsへの到達は実機確認済み。`nohlt` を追加したdiag 13では2回連続で表示が安定したとの報告あり。長時間の安定性とSDからのrootfs起動は未確認。**
 
-現在の生成物は **diag 58（起動メニュー・SD直接起動）**。指定したSDパーティションがない場合は、エラーと認識済みパーティションを表示する。diag 50でWKPUのタイマー起床を有効にし、通常idleをPSTOP3へ変更。メモリ・画面用クロックは維持する。待機からの自動復帰・入力・ふた開閉・sleep 10と短時間の放置は実機確認済み。英字・Enter・Shiftに加え、Space・Backspace・矢印・PgUp/PgDn・マイナスをLinuxコンソールへ送る。
+現在の生成物は **diag 59（USB Ethernet再有効化・実機未確認）**。指定したSDパーティションがない場合は、エラーと認識済みパーティションを表示する。diag 50でWKPUのタイマー起床を有効にし、通常idleをPSTOP3へ変更。メモリ・画面用クロックは維持する。待機からの自動復帰・入力・ふた開閉・sleep 10と短時間の放置は実機確認済み。英字・Enter・Shiftに加え、Space・Backspace・矢印・PgUp/PgDn・マイナスをLinuxコンソールへ送る。
 A=`01`・Q=`11`・Enter=`25`・Shift=`2e`を実機確認し、残りの英字は連番と推定している。
 `~ #` で `ls` や `dmesg` を入力してEnterを押す。Shiftとの同時押しで大文字になる。
 diag 15で本体キーボードから入力できたとの実機報告あり。あA1で英字／数字・記号モードを切り替える。配置は`keymap`で確認できる。
@@ -20,7 +20,7 @@ diag 47でふたを開いた後の入力復帰を実機確認。diag 48は `back
 `backlight on` / `backlight off` / `backlight status` も使用可能。diag 48の点灯・消灯は実機確認済み。diag 49では閉じると消灯し、開くと手動設定へ戻る（実機未確認）。明るさの段階変更は未対応。
 上段6キーはF1〜F6、戻るはEsc、音声はCtrl、あA1は英字／数字・記号の切り替え。音声+CでCtrl+C、Shift+マイナスで `_`。
 ローダー `power mask 1` で純正APIによる電源・ふた操作の停止抑止を追加（電源キー後の入力継続を実機確認）。更新対象は `AppMain.bin`。
-電源キーは `1c` と実機確認済み（M4コードとも一致）。Linux入力イベントには未割り当て。USBは無効。diag 30は起動直後から入力できなくなったため、diag 31でSMC1変更を撤去し `nohlt` を復元した。
+電源キーは `1c` と実機確認済み（M4コードとも一致）。Linux入力イベントには未割り当て。USBはdiag 59で再有効化。diag 30は起動直後から入力できなくなったため、diag 31でSMC1変更を撤去し `nohlt` を復元した。
 diag 25の端子操作で自動再起動を実機確認。diag 26ではこの処理を`reboot`に割り当てた（コマンド変更後は実機未確認）。電源キーなしで純正OSを起動し直す。電源断は未対応。
 タッチパネル入力は実装済み・実機未確認。音声は未対応。詳細は [boot.md](docs/boot.md) を参照。
 
@@ -36,51 +36,12 @@ diag 25の端子操作で自動再起動を実機確認。diag 26ではこの処
 フォルダー全体を本体またはSDの追加アプリ置き場へコピーする。
 起動メニューでEnterを押すとSDの `/dev/mmcblk0p2` からBrainuxを起動する。Dで診断シェル、Escで純正OSへ戻る。SD起動に失敗すると理由を表示して診断シェルへ進む。
 更新時は `AppMain.bin` と `BOOT.BIN` の両方を差し替える。起動先の選択はメモリ上のDTBだけに反映し、SD設定やBOOT.BINは変更しない。
-純正OSの `SD0:![Vibecoded by GPT-6-Astra](https://img.shields.io/badge/Vibecoded--by-GPT--6--Astra-red)
-
-# Brainux on PW-H1
-
-PW-H1 / V690_H1の追加アプリからLinuxへ移行する実験用ローダー。
-`AppContext.exec_path` と同じフォルダーからカーネル・DTBを読み込むため、本体／SDのどちらに配置しても使える。
-
-**診断ログの保存、メモリマッピング、Linuxからinitramfsへの到達は実機確認済み。`nohlt` を追加したdiag 13では2回連続で表示が安定したとの報告あり。長時間の安定性とSDからのrootfs起動は未確認。**
-
-現在の生成物は **diag 58（起動メニュー・SD直接起動）**。指定したSDパーティションがない場合は、エラーと認識済みパーティションを表示する。diag 50でWKPUのタイマー起床を有効にし、通常idleをPSTOP3へ変更。メモリ・画面用クロックは維持する。待機からの自動復帰・入力・ふた開閉・sleep 10と短時間の放置は実機確認済み。英字・Enter・Shiftに加え、Space・Backspace・矢印・PgUp/PgDn・マイナスをLinuxコンソールへ送る。
-A=`01`・Q=`11`・Enter=`25`・Shift=`2e`を実機確認し、残りの英字は連番と推定している。
-`~ #` で `ls` や `dmesg` を入力してEnterを押す。Shiftとの同時押しで大文字になる。
-diag 15で本体キーボードから入力できたとの実機報告あり。あA1で英字／数字・記号モードを切り替える。配置は`keymap`で確認できる。
-`keycodes` と入力してEnterを押すと、約20秒間キー番号を表示してシェルへ戻る。
-確認するキーを1個ずつ0.5秒ほど押して離す。
-通知キュー対策で入力回数による遅延の解消を実機確認。追加デバウンスを削除し、長押しの自動キーリピートを有効にした。
-`wfi-test` でCPU待機時間・タイマー割り込み・生キー状態を確認できる（停止時はリセットが必要）。diag 50ではWKPU channel 3を有効にし、通常idleでも待機する。`SLEEP` がキー操作なしで約1 tick以内に戻ること、`sleep 10`、入力、ふた開閉、表示の安定性を確認する。
-同時押しは3キーまで実機確認済み。4キーは未対応。
-diag 47でふたを開いた後の入力復帰を実機確認。diag 48は `backlight test` で2秒間消灯して再点灯する依頼を送れる。
-`backlight on` / `backlight off` / `backlight status` も使用可能。diag 48の点灯・消灯は実機確認済み。diag 49では閉じると消灯し、開くと手動設定へ戻る（実機未確認）。明るさの段階変更は未対応。
-上段6キーはF1〜F6、戻るはEsc、音声はCtrl、あA1は英字／数字・記号の切り替え。音声+CでCtrl+C、Shift+マイナスで `_`。
-ローダー `power mask 1` で純正APIによる電源・ふた操作の停止抑止を追加（電源キー後の入力継続を実機確認）。更新対象は `AppMain.bin`。
-電源キーは `1c` と実機確認済み（M4コードとも一致）。Linux入力イベントには未割り当て。USBは無効。diag 30は起動直後から入力できなくなったため、diag 31でSMC1変更を撤去し `nohlt` を復元した。
-diag 25の端子操作で自動再起動を実機確認。diag 26ではこの処理を`reboot`に割り当てた（コマンド変更後は実機未確認）。電源キーなしで純正OSを起動し直す。電源断は未対応。
-タッチパネル入力は実装済み・実機未確認。音声は未対応。詳細は [boot.md](docs/boot.md) を参照。
-
-## 生成物と起動
-
-`make image` は `target/APP/Brainux/` に次を生成する。
-
-- `AppMain.bin`: 純正OS上で動くローダー。
-- `BOOT.BIN`: ARM Linux Image・initramfs・PW-H1 DTB・SHA-256。
-- `index.din`: 空の追加アプリ識別ファイル。
-- `FONT-LICENSE.txt`: Reflexのフォントライセンス。
-
-フォルダー全体を本体またはSDの追加アプリ置き場へコピーする。
-起動メニューでEnterを押すとSDの `/dev/mmcblk0p2` からBrainuxを起動する。Dで診断シェル、Escで純正OSへ戻る。SD起動に失敗すると理由を表示して診断シェルへ進む。
-更新時は `AppMain.bin` と `BOOT.BIN` の両方を差し替える。 を開けない場合は起動メニューに警告を表示し、SD起動を止める。Enterで再確認でき、Dの診断起動は利用できる。これは読み取り可能なSDドライブの確認で、ext4 rootfsの検証はLinux起動後に行う。
+純正OSのSDドライブを開けない場合は起動メニューで警告する。Enterで再確認、Dで診断起動が可能。
 移行後は純正OSの元の実行状態へreturnしない。diag 21から `reboot` で純正OSを起動し直す経路を追加した（実機未確認）。停止する場合は本体のリセット操作が必要。
 読み込み・サイズ・チェックサム・DTB・マッピングのエラーではLinuxを起動しない。
 周辺機器の停止中に異常を検出した場合はpanic画面で停止する。この段階では純正OSには戻れない。
 
-USB有効時は、起動したinitramfsがUSB CDC ACMを公開する構成（diag 13では無効）。
-Linuxホストでは `/dev/ttyACM*`、Windowsでは対応するCOMポートを開く（115200）。
-**initramfsのUSBコンソールは診断用の認証なしrootシェル**。
+USBはperipheralモード。initramfsではgadgetをbindせず、SD rootfsのサービスでEthernetを公開する。
 起動コンソールは本体画面。`0x66e00000` の専用RGB565バッファをLCDIFの連続表示で使う。
 表示用の1 MiBを `reserved-memory` / `no-map` で通常のメモリ利用から除外する。
 転送不足からの自動復帰を有効にし、純正OSの補助表示レイヤーは停止する。
@@ -177,3 +138,25 @@ PID 1が診断シェルを終了し `switch_root` で起動する。配布rootfs
 
 実機ログと解析の根拠は [docs/bringup.md](docs/bringup.md)、
 ローダーのメモリ配置・移行手順・制限は [docs/boot.md](docs/boot.md) を参照。
+
+## PW-H1 USB Ethernet（diag 59、実機未確認）
+
+USBコントローラー・PHYを再有効化し、NCMとRNDISをカーネルへ組み込む。
+以前のPHY初期化タイムアウトが解消したかは実機で確認が必要。
+起動メニューのDから診断シェルへ入り、次を一度実行する。
+
+```sh
+fix-usb
+boot-root /dev/mmcblk0p2
+```
+
+`fix-usb` は配布SDイメージの既存Ethernetサービス用スクリプトをNCMからRNDISへ変更する。
+元ファイルは `/usr/bin/enable_ethernet_gadget.before-pwh1` に保存する。
+USB controllerが利用可能な場合のみ設定し、DHCPはusb0だけに限定する。
+Windows側は [Wikiの設定](https://wiki.brainux.org/tips/usb-ethernet-gadget/#windows-10--11-の設定)
+に従い、RNDISドライバーとインターネット共有を設定する。
+Wikiのimx28用DTB編集はPW-H1には適用しない。BOOT.BIN内のDTBを使用する。
+
+`USB controller unavailable` の場合は診断シェルで `usb-report` を実行し、PHYのエラーを確認する。
+診断シェルにはネットワーク経由のrootシェルを公開しない。
+SDのLinuxでは `ip -4 addr show usb0`、`systemctl status ethernet_gadget` で状態を確認できる。

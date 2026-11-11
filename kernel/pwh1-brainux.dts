@@ -21,8 +21,8 @@
         reg = <0x61000000 0x07000000>;
     };
     chosen {
-        // shortcut: isolate display until USB PHY reset no longer corrupts it.
-        brainux,display-only;
+        // The SD rootfs service owns the USB gadget; initramfs must not bind ACM.
+        brainux,usb-rootfs;
         brainux,boot-root = <0>;
         bootargs = "console=tty0 rdinit=/init clk_ignore_unused loglevel=4 fbcon=rotate:1";
         #address-cells = <1>;
@@ -75,6 +75,6 @@
 // Keep the firmware's SD pin mux and power settings during initial bring-up.
 &usdhc0 { status = "okay"; bus-width = <4>; broken-cd; no-1-8-v; };
 &usdhc1 { status = "disabled"; };
-&usbotg1 { status = "disabled"; dr_mode = "peripheral"; disable-over-current; };
-&usbphy1 { status = "disabled"; };
-&usbmisc1 { status = "disabled"; };
+&usbotg1 { status = "okay"; dr_mode = "peripheral"; disable-over-current; };
+&usbphy1 { status = "okay"; };
+&usbmisc1 { status = "okay"; };

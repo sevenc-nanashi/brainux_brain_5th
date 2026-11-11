@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 0 ] || { echo 'usage: fix-usb' >&2; exit 1; }
+[ -b /dev/mmcblk0p2 ] || { echo 'SD rootfs partition not found' >&2; exit 1; }
+if mountpoint -q /newroot; then
+    echo '/newroot is already mounted; unmount it before retrying' >&2
+    exit 1
+fi
+mount -t ext4 -o ro /dev/mmcblk0p2 /newroot
+trap 'umount /newroot' EXIT
+script=/newroot/usr/bin/enable_ethernet_gadget
+[ -f "$script" ] && [ ! -L "$script" ] || { echo 'Ethernet gadget script missing or symlinked' >&2; exit 1; }
+if grep -q 'functions/rndis.usb0' "$script"; then
+    echo 'RNDIS already configured; unchanged'
+    exit 0
+fi
+grep -q 'functions/ncm.usb0' "$script" || { echo 'Unrecognized gadget script; unchanged' >&2; exit 1; }
+[ ! -e "$script.before-pwh1" ] && [ ! -L "$script.before-pwh1" ] || { echo 'Backup already exists; unchanged' >&2; exit 1; }
+mount -o remount,rw /newroot
+cp -p "$script" "$script.before-pwh1"
+sed -i '2a\
+set -eu\
+mountpoint -q /sys/kernel/config || mount -t configfs configfs /sys/kernel/config\
+[ -e /sys/class/udc/ci_hdrc.0 ] || { echo "USB controller unavailable" >&2; exit 1; }
+s@functions/ncm\.usb0@functions/rndis.usb0@g
+s/NCM Config/RNDIS Config/g
+s/^dhclient$/dhclient usb0/
+/^mkdir ${g}$/a\
+echo 0x0525 > ${g}/idVendor\
+echo 0xa4a2 > ${g}/idProduct
+' "$script"
+echo 'Configured RNDIS. Boot Brainux and enable Internet sharing on the PC.'

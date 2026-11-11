@@ -68,6 +68,7 @@ FileUtils.install(File.join(root, 'initramfs/backlight'), File.join(fs, 'sbin/ba
 FileUtils.install(File.join(root, 'initramfs/fix-sd'), File.join(fs, 'sbin/fix-sd'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/fix-screen'), File.join(fs, 'sbin/fix-screen'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/fix-touch'), File.join(fs, 'sbin/fix-touch'), mode: 0755)
+FileUtils.install(File.join(root, 'initramfs/fix-usb'), File.join(fs, 'sbin/fix-usb'), mode: 0755)
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')
 entries = Dir.glob('**/*', base: fs).sort.map do |path|
@@ -93,7 +94,7 @@ run({'ARCH'=>'arm', 'CROSS_COMPILE'=>cross}, File.join(linux, 'scripts/kconfig/m
     File.join(output, '.config'), fragment, chdir: linux, out: File::NULL)
 run(*base, 'olddefconfig', out: File::NULL)
 resolved = File.read(File.join(output, '.config'))
-%w[CLKSRC_IMX_TPM COMPAT_32BIT_TIME POSIX_TIMERS MMU CPU_V7 SOC_IMX7ULP GENERIC_IDLE_POLL_SETUP POWER_RESET INPUT INPUT_KEYBOARD VT VT_CONSOLE ARM_PSCI ARM_PATCH_PHYS_VIRT DEVTMPFS BLK_DEV_INITRD FB_SIMPLE MFD_SYSCON DEBUG_FS USB_MXS_PHY USB_CHIPIDEA_IMX USB_CONFIGFS_ACM USB_CHIPIDEA_UDC MMC_SDHCI_ESDHC_IMX EXT4_FS].each do |name|
+%w[CLKSRC_IMX_TPM COMPAT_32BIT_TIME POSIX_TIMERS MMU CPU_V7 SOC_IMX7ULP GENERIC_IDLE_POLL_SETUP POWER_RESET INPUT INPUT_KEYBOARD VT VT_CONSOLE ARM_PSCI ARM_PATCH_PHYS_VIRT DEVTMPFS BLK_DEV_INITRD FB_SIMPLE MFD_SYSCON DEBUG_FS USB_MXS_PHY USB_CHIPIDEA_IMX USB_CONFIGFS_ACM USB_CONFIGFS_RNDIS USB_CONFIGFS_NCM NETDEVICES USB_CHIPIDEA_UDC MMC_SDHCI_ESDHC_IMX EXT4_FS].each do |name|
   raise "Required kernel option missing: CONFIG_#{name}=y" unless resolved.lines.any? { |line| line.chomp == "CONFIG_#{name}=y" }
 end
 run(*base, "-j#{jobs}", 'Image', 'imx7ulp-pwh1-brainux.dtb')
