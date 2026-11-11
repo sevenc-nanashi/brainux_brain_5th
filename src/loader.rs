@@ -28,6 +28,7 @@ static mut PAGE_TABLE: PageTable = PageTable([0; 4096]);
 struct Loader {
     status: String,
     loaded: usize,
+    sd_ready: bool,
 }
 
 unsafe fn verify_mapping() -> Result<(), &'static str> {
@@ -99,13 +100,24 @@ fn load() -> Result<usize, String> {
     Ok(size)
 }
 
+fn sd_ready() -> bool {
+    // Probe the firmware mount, not the app path (the loader may be in internal storage).
+    unsafe { fs::Directory::open(cr"SD0:\") }.is_some()
+}
+
 fn main() -> Loader {
+    let sd_ready = sd_ready();
     match load() {
         Ok(loaded) => Loader {
             loaded,
+            sd_ready,
             status: String::from("Boot image verified"),
         },
-        Err(status) => Loader { loaded: 0, status },
+        Err(status) => Loader {
+            loaded: 0,
+            status,
+            sd_ready,
+        },
     }
 }
 
@@ -166,6 +178,13 @@ impl Application for Loader {
             return Action::None;
         }
         let direct = code == peg::key::ENTER;
+        if direct {
+            self.sd_ready = sd_ready();
+            if !self.sd_ready {
+                self.status = String::from("Insert a readable SD card, then press Enter again.");
+                return Action::Redraw;
+            }
+        }
         if direct || code == b'D' as u16 || code == b'd' as u16 {
             unsafe {
                 quiesce::progress("Boot: launch requested");
@@ -226,7 +245,7 @@ impl Application for Loader {
         Action::None
     }
     fn draw(&self, pixels: &mut [u16]) {
-        loader_screen::draw(pixels, self.loaded, &self.status);
+        loader_screen::draw(pixels, self.loaded, self.sd_ready, &self.status);
     }
 }
 const _: () = {

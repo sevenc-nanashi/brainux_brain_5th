@@ -11,7 +11,7 @@ fn rect(pixels: &mut [u16], x: usize, y: usize, w: usize, h: usize, color: u16) 
     }
 }
 
-pub fn draw(pixels: &mut [u16], loaded: usize, status: &str) {
+pub fn draw(pixels: &mut [u16], loaded: usize, sd_ready: bool, status: &str) {
     pixels.fill(PAPER);
     rect(pixels, 0, 0, 12, display::HEIGHT, TEAL);
     let label = |pixels: &mut [u16], x, y, value: &str, fg, bg, scale| {
@@ -30,10 +30,35 @@ pub fn draw(pixels: &mut [u16], loaded: usize, status: &str) {
     label(pixels, 620, 44, "SHARP PW-H1", INK, PAPER, 1);
     label(pixels, 620, 76, "V690_H1", TEAL, PAPER, 1);
     if loaded != 0 {
-        rect(pixels, 44, 184, 766, 100, TEAL);
-        label(pixels, 68, 200, "Start Brainux", 0xffff, TEAL, 2);
-        label(pixels, 68, 252, "SD card", 0xffff, TEAL, 1);
-        label(pixels, 704, 220, "ENTER", 0xffff, TEAL, 1);
+        let accent = if sd_ready { TEAL } else { 0x89e0 };
+        rect(pixels, 44, 184, 766, 100, accent);
+        label(
+            pixels,
+            68,
+            200,
+            if sd_ready {
+                "Start Brainux"
+            } else {
+                "SD card unavailable"
+            },
+            0xffff,
+            accent,
+            2,
+        );
+        label(
+            pixels,
+            68,
+            252,
+            if sd_ready {
+                "SD card"
+            } else {
+                "Insert SD card, then retry"
+            },
+            0xffff,
+            accent,
+            1,
+        );
+        label(pixels, 704, 220, "ENTER", 0xffff, accent, 1);
         label(pixels, 68, 312, "Diagnostic shell", INK, PAPER, 1);
         label(pixels, 752, 312, "D", TEAL, PAPER, 1);
         rect(pixels, 44, 362, 766, 1, 0xbdf7);
