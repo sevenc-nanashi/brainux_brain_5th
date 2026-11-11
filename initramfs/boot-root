@@ -29,6 +29,13 @@ done
 # The distributed rootfs has no fstab entry to remount / writable at startup.
 mount -o remount,rw /newroot
 mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run
+# Apply board settings to the validated rootfs before handing it to systemd.
+for fix in fix-sd fix-screen fix-touch fix-usb; do
+    if ! /sbin/"$fix" --mounted; then
+        echo "Automatic setup failed: $fix; rootfs was not started." >&2
+        exit 1
+    fi
+done
 # PID 1 performs switch_root; a shell command cannot replace init on its own.
 trap - EXIT
 kill -USR1 1 || { umount /newroot; exit 1; }

@@ -69,6 +69,8 @@ FileUtils.install(File.join(root, 'initramfs/fix-sd'), File.join(fs, 'sbin/fix-s
 FileUtils.install(File.join(root, 'initramfs/fix-screen'), File.join(fs, 'sbin/fix-screen'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/fix-touch'), File.join(fs, 'sbin/fix-touch'), mode: 0755)
 FileUtils.install(File.join(root, 'initramfs/fix-usb'), File.join(fs, 'sbin/fix-usb'), mode: 0755)
+FileUtils.mkdir_p(File.join(fs, 'lib'))
+FileUtils.install(File.join(root, 'initramfs/brainux-fix.sh'), File.join(fs, 'lib/brainux-fix.sh'), mode: 0644)
 # gen_init_cpio makes the console node without requiring root or mknod.
 list = File.join(root, 'target/initramfs.list')
 entries = Dir.glob('**/*', base: fs).sort.map do |path|

@@ -8,7 +8,7 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /run
 # Keep kernel messages in dmesg without scrolling the diagnostic screen.
 dmesg -n 1
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 59, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 60, @BUILD_REVISION@)\n'
 if [ -e /proc/device-tree/chosen/brainux,usb-rootfs ]; then
     echo 'USB Ethernet: configured by the SD rootfs.'
     set -- /sys/class/udc/*
@@ -47,7 +47,7 @@ echo 'USB: configuring serial console'
     echo "USB: serial console bound to ${1##*/}"
 USB_SETUP
 usb_status=$?
-printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 59, @BUILD_REVISION@)\n'
+printf '\033[2J\033[HBrainux PW-H1 initramfs started (diag 60, @BUILD_REVISION@)\n'
 if [ "$usb_status" -ne 0 ]; then
     echo "USB gadget setup failed (exit $usb_status)"
     /bin/sh /sbin/usb-report > /run/usb-report.log 2>&1
@@ -105,10 +105,6 @@ else
     echo 'Reset driver: MISSING'
 fi
 echo 'Type reboot to start the original system.'
-echo 'Type fix-screen once to rotate the Xorg desktop.'
-echo 'Type fix-touch once to set calibrated touchscreen coordinates.'
-echo 'Type fix-usb once to configure USB Ethernet (RNDIS).'
-echo 'Type fix-sd once to fix the SD boot partition path.'
 echo 'Use boot-root /dev/mmcblk0p2 to start an existing Brainux rootfs.'
 # The loader selects SD boot without changing the persistent bundle.
 mode=$(od -An -tu1 /proc/device-tree/chosen/brainux,boot-root 2>/dev/null | tr -d ' \n')

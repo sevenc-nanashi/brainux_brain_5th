@@ -7,7 +7,7 @@ PW-H1 / V690_H1の追加アプリからLinuxへ移行する実験用ローダー
 
 **診断ログの保存、メモリマッピング、Linuxからinitramfsへの到達は実機確認済み。`nohlt` を追加したdiag 13では2回連続で表示が安定したとの報告あり。長時間の安定性とSDからのrootfs起動は未確認。**
 
-現在の生成物は **diag 59（USB Ethernet再有効化・実機未確認）**。指定したSDパーティションがない場合は、エラーと認識済みパーティションを表示する。diag 50でWKPUのタイマー起床を有効にし、通常idleをPSTOP3へ変更。メモリ・画面用クロックは維持する。待機からの自動復帰・入力・ふた開閉・sleep 10と短時間の放置は実機確認済み。英字・Enter・Shiftに加え、Space・Backspace・矢印・PgUp/PgDn・マイナスをLinuxコンソールへ送る。
+現在の生成物は **diag 60（SD起動時の自動設定）**。指定したSDパーティションがない場合は、エラーと認識済みパーティションを表示する。diag 50でWKPUのタイマー起床を有効にし、通常idleをPSTOP3へ変更。メモリ・画面用クロックは維持する。待機からの自動復帰・入力・ふた開閉・sleep 10と短時間の放置は実機確認済み。英字・Enter・Shiftに加え、Space・Backspace・矢印・PgUp/PgDn・マイナスをLinuxコンソールへ送る。
 A=`01`・Q=`11`・Enter=`25`・Shift=`2e`を実機確認し、残りの英字は連番と推定している。
 `~ #` で `ls` や `dmesg` を入力してEnterを押す。Shiftとの同時押しで大文字になる。
 diag 15で本体キーボードから入力できたとの実機報告あり。あA1で英字／数字・記号モードを切り替える。配置は`keymap`で確認できる。
@@ -102,9 +102,6 @@ Brainuxの既存ユーザー・パスワードが必要。
 
 ```sh
 cat /proc/partitions
-fix-sd
-fix-screen
-fix-touch
 boot-root /dev/mmcblk0p2
 ```
 
@@ -143,13 +140,15 @@ PID 1が診断シェルを終了し `switch_root` で起動する。配布rootfs
 
 USBコントローラー・PHYを再有効化し、NCMとRNDISをカーネルへ組み込む。
 以前のPHY初期化タイムアウトが解消したかは実機で確認が必要。
-起動メニューのDから診断シェルへ入り、次を一度実行する。
+起動メニューのEnterでSDから起動する。診断シェルから起動する場合は次を実行する。
 
 ```sh
-fix-usb
 boot-root /dev/mmcblk0p2
 ```
 
+SD起動時に `fix-sd`・`fix-screen`・`fix-touch`・`fix-usb` を自動適用する。
+修正済みなら再適用せず、想定外の設定では上書きせずに起動を止める。
+手動の `fix-*` は診断シェルでも引き続き実行できる。
 `fix-usb` は配布SDイメージの既存Ethernetサービス用スクリプトをNCMからRNDISへ変更する。
 元ファイルは `/usr/bin/enable_ethernet_gadget.before-pwh1` に保存する。
 USB controllerが利用可能な場合のみ設定し、DHCPはusb0だけに限定する。

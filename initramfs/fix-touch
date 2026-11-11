@@ -1,14 +1,6 @@
 #!/bin/sh
 set -eu
-[ "$#" -eq 0 ] || { echo 'usage: fix-touch' >&2; exit 1; }
-[ -b /dev/mmcblk0p2 ] || { echo 'SD rootfs partition not found' >&2; exit 1; }
-if mountpoint -q /newroot; then
-    echo '/newroot is already mounted; unmount it before retrying' >&2
-    exit 1
-fi
-mount -t ext4 -o ro /dev/mmcblk0p2 /newroot
-temporary=''
-trap '[ -z "$temporary" ] || rm -f "$temporary"; umount /newroot' EXIT
+. /lib/brainux-fix.sh
 directory=/newroot/etc/X11/xorg.conf.d
 [ -d "$directory" ] && [ ! -L "$directory" ] || { echo 'Xorg config directory missing or symlinked' >&2; exit 1; }
 config=$directory/99-pwh1-touch.conf

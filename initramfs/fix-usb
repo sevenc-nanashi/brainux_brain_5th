@@ -1,13 +1,6 @@
 #!/bin/sh
 set -eu
-[ "$#" -eq 0 ] || { echo 'usage: fix-usb' >&2; exit 1; }
-[ -b /dev/mmcblk0p2 ] || { echo 'SD rootfs partition not found' >&2; exit 1; }
-if mountpoint -q /newroot; then
-    echo '/newroot is already mounted; unmount it before retrying' >&2
-    exit 1
-fi
-mount -t ext4 -o ro /dev/mmcblk0p2 /newroot
-trap 'umount /newroot' EXIT
+. /lib/brainux-fix.sh
 script=/newroot/usr/bin/enable_ethernet_gadget
 [ -f "$script" ] && [ ! -L "$script" ] || { echo 'Ethernet gadget script missing or symlinked' >&2; exit 1; }
 if grep -q 'functions/rndis.usb0' "$script"; then
